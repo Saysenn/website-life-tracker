@@ -72,10 +72,9 @@ const colors = {
 const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
 function appUrl() {
-  const url =
-    process.env.APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
-  return url ? url.replace(/\/$/, "") : null;
+  const value = (process.env.APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "").trim();
+  if (!value) return null;
+  return (/^https?:\/\//.test(value) ? value : `https://${value}`).replace(/\/+$/, "");
 }
 
 function layout(title, body) {
