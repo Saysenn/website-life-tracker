@@ -53,14 +53,78 @@ Open http://localhost:3000 and sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD
 
 ## Deploy to Vercel
 
-Vercel functions cannot keep a SQLite file, so production uses [Turso](https://turso.tech), which is hosted SQLite.
+Vercel functions cannot keep a SQLite file, so production uses [Turso](https://turso.tech), which is hosted SQLite. Do the steps in this order, because the database has to exist before the first build runs.
 
-1. Create a Turso database and copy its URL and auth token (or add the Turso integration from the Vercel marketplace).
-2. Import the repository in Vercel.
-3. Add these environment variables: `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `AUTH_SECRET`, `APP_TIMEZONE`, `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `SMTP_USER`, `SMTP_PASSWORD`, `NOTIFY_EMAIL`, `CRON_SECRET`.
-4. Deploy. The `vercel-build` script runs the database migrations before building.
+### 1. Prepare the secrets
 
-The reminder cron is defined in `vercel.json` and calls `/api/cron/reminders` every day at 05:00 UTC (09:00 in Dubai). Vercel sends `CRON_SECRET` as a bearer token, and the route rejects any request without it.
+```bash
+openssl rand -base64 32   # AUTH_SECRET
+openssl rand -hex 24      # CRON_SECRET
+```
+
+Create a Google App Password at https://myaccount.google.com/apppasswords for `SMTP_PASSWORD`. Your normal Gmail password will not work.
+
+### 2. Create the database
+
+Add the Turso integration from the Vercel marketplace, which provisions the database and sets `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` for you. Or create one with the Turso CLI and copy both values by hand.
+
+### 3. Create the tables
+
+`vercel-build` migrates on every deploy, but run it once yourself so you can see it succeed:
+
+```bash
+TURSO_DATABASE_URL=libsql://your-db.turso.io TURSO_AUTH_TOKEN=... npx drizzle-kit migrate
+```
+
+Pass them inline like this. Putting them in `.env.local` points local development at production data.
+
+### 4. Set the environment variables
+
+All of these go in the project settings, on the Production environment:
+
+| Variable | Value |
+| --- | --- |
+| `ADMIN_USERNAME` | your login name |
+| `ADMIN_PASSWORD` | your login password, no trailing spaces |
+| `AUTH_SECRET` | from step 1, required or sign in fails |
+| `APP_TIMEZONE` | `Asia/Dubai`, decides what counts as today |
+| `TURSO_DATABASE_URL` | from step 2 |
+| `TURSO_AUTH_TOKEN` | from step 2 |
+| `SMTP_USER` | the Gmail address that sends |
+| `SMTP_PASSWORD` | the App Password from step 1 |
+| `NOTIFY_EMAIL` | where reminders arrive |
+| `CRON_SECRET` | from step 1, Vercel sends it to the cron route |
+
+### 5. Deploy
+
+Import the repository and deploy. Vercel runs `vercel-build`, which applies migrations and then builds.
+
+Environment variables never reach a deployment that already exists, so redeploy after adding or changing any of them.
+
+### 6. Check it works
+
+1. Sign in.
+2. Add a company, reload the page, confirm it is still there. That proves Turso is connected.
+3. Settings, then **Send test email**.
+4. Confirm the cron route answers:
+   ```bash
+   curl -i -H "Authorization: Bearer YOUR_CRON_SECRET" https://your-app.vercel.app/api/cron/reminders
+   ```
+   A JSON body means the database and email path are live. A 500 means the tables are missing, a 401 means the secret does not match.
+5. Project, then Cron Jobs, confirm the daily job is listed.
+
+The reminder cron is defined in `vercel.json` and calls `/api/cron/reminders` every day at 05:00 UTC, 09:00 in Dubai, give or take an hour on the Hobby plan. Vercel sends `CRON_SECRET` as a bearer token and the route rejects anything without it. The same run refreshes the USDT rates.
+
+### When sign in fails
+
+| What you see | Cause | Fix |
+| --- | --- | --- |
+| Vercel error page, no app styling | The action threw before rendering, almost always missing tables | Run step 3, then redeploy |
+| Same page, tables exist | `AUTH_SECRET` is missing | Add it, then redeploy |
+| Username or password is incorrect | `ADMIN_USERNAME` or `ADMIN_PASSWORD` unset, or a trailing space in the pasted password | Retype both, then redeploy |
+| Too many attempts | Five failures from your IP | Wait 15 minutes |
+
+Project, then Logs, then attempt the sign in again. The entry that appears names the real error.
 
 ## Scripts
 
