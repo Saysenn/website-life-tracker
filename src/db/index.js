@@ -1,16 +1,12 @@
 import "server-only";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
+import { dbCredentials } from "./credentials";
 import * as schema from "./schema";
 
 const globalForDb = globalThis;
 
-const client =
-  globalForDb.libsql ??
-  createClient({
-    url: process.env.TURSO_DATABASE_URL || "file:local.db",
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  });
+const client = globalForDb.libsql ?? createClient(dbCredentials());
 
 if (process.env.NODE_ENV !== "production") globalForDb.libsql = client;
 
