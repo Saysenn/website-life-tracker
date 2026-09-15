@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `gas_currency` text;

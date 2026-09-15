@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `grace_days` integer DEFAULT 6 NOT NULL;
