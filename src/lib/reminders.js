@@ -1,62 +1,77 @@
 import "server-only";
-import { gte } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { reminderLog } from "@/db/schema";
+import { digestLog, reminderLog } from "@/db/schema";
+import { ROUNDS } from "./constants";
 import { getCompanies, getSettings, getStatusRules, getToday } from "./data";
 import { formatDate, relativeDays } from "./dates";
 import { defaultRecipient, sendMail } from "./mail";
 import { openStates } from "./services";
 import { plural } from "./utils";
 
-const keyOf = (item) => `${item.companyId}:${item.service}:${item.dueDate}:${item.threshold}`;
-
-export async function findDueReminders(today, reminderDays, graceDays = 0) {
-  const overdueSteps = Array.from({ length: graceDays }, (_, index) => -(index + 1)).reverse();
-  const steps = [...overdueSteps, ...[...reminderDays].sort((a, b) => a - b)];
-  const rules = await getStatusRules();
-  const candidates = (await getCompanies()).flatMap((company) =>
-    openStates(company, today, rules).flatMap(({ service, end, days, status }) => {
-      const threshold = end ? steps.find((step) => days <= step) : undefined;
-      if (threshold === undefined) return [];
-      return [
-        {
-          companyId: company.id,
-          company: company.name,
-          group: company.groupName,
-          paymentMethod: company.paymentMethod,
-          digirdpEmail: company.digirdpEmail,
-          service: service.key,
-          serviceLabel: service.label,
-          dueDate: end,
-          days,
-          status,
-          threshold,
-        },
-      ];
-    }),
-  );
-  if (!candidates.length) return [];
-
-  const earliest = candidates.reduce((min, item) => (item.dueDate < min ? item.dueDate : min), candidates[0].dueDate);
-  const sent = await db.select().from(reminderLog).where(gte(reminderLog.dueDate, earliest));
-  const sentKeys = new Set(sent.map(keyOf));
-  return candidates.filter((item) => !sentKeys.has(keyOf(item))).sort((a, b) => a.days - b.days);
+export function roundFor(hour) {
+  const match = [...ROUNDS].reverse().find((round) => hour >= round.hour);
+  return (match ?? ROUNDS[0]).key;
 }
 
-export async function runReminders({ force = false } = {}) {
+export async function buildDigest(today, rules) {
+  const items = (await getCompanies()).flatMap((company) =>
+    openStates(company, today, rules)
+      .filter(({ end, days }) => end && days <= rules.window)
+      .map(({ service, end, days, status }) => ({
+        companyId: company.id,
+        company: company.name,
+        group: company.groupName,
+        paymentMethod: company.paymentMethod,
+        digirdpEmail: company.digirdpEmail,
+        service: service.key,
+        serviceLabel: service.label,
+        dueDate: end,
+        days,
+        status,
+      })),
+  );
+  items.sort((a, b) => a.days - b.days || a.company.localeCompare(b.company));
+
+  return {
+    expiring: items.filter((item) => item.days === 0),
+    overdue: items.filter((item) => item.days < 0),
+    upcoming: items.filter((item) => item.days > 0),
+    count: items.length,
+    window: rules.window,
+    grace: rules.grace,
+  };
+}
+
+async function claimRound(day, round, items) {
+  const claimed = await db.insert(digestLog).values({ day, round, items }).onConflictDoNothing().returning();
+  return claimed.length > 0;
+}
+
+export async function runReminders({ round = "noon", force = false } = {}) {
   const settings = await getSettings();
   if (!settings.remindersEnabled && !force) return { sent: 0, skipped: "disabled" };
 
-  const recipient = settings.notifyEmail || defaultRecipient();
-  const due = await findDueReminders(getToday(), settings.reminderDays, settings.graceDays);
-  if (!due.length) return { sent: 0 };
+  const today = getToday();
+  const digest = await buildDigest(today, await getStatusRules());
+  if (!digest.count) return { sent: 0, skipped: "nothing due" };
+  if (round !== "noon" && !digest.expiring.length && !force) return { sent: 0, skipped: "nothing expires today" };
+  if (!force && !(await claimRound(today, round, digest.count))) return { sent: 0, skipped: "already sent" };
 
-  await sendMail({ to: recipient, ...reminderEmail(due) });
+  try {
+    await sendMail({ to: settings.notifyEmail || defaultRecipient(), ...reminderEmail(digest, round) });
+  } catch (error) {
+    if (!force) await db.delete(digestLog).where(and(eq(digestLog.day, today), eq(digestLog.round, round)));
+    throw error;
+  }
+
+  const seen = [...digest.expiring, ...digest.overdue, ...digest.upcoming];
   await db
     .insert(reminderLog)
-    .values(due.map(({ companyId, service, dueDate, threshold }) => ({ companyId, service, dueDate, threshold })))
+    .values(seen.map(({ companyId, service, dueDate, days }) => ({ companyId, service, dueDate, threshold: days })))
     .onConflictDoNothing();
-  return { sent: due.length };
+
+  return { sent: digest.count, round };
 }
 
 const colors = {
@@ -93,10 +108,19 @@ ${body}${button}
 </div></body></html>`;
 }
 
-function itemRow(item) {
-  const tone = item.days < 0 ? colors.danger : item.days <= 7 ? colors.warning : colors.ink;
-  const flag = item.status === "rebuy" ? "Rebuy needed" : item.status === "suspended" ? "Suspended" : null;
-  const details = [item.serviceLabel, flag, item.group, item.paymentMethod].filter(Boolean).map(escape).join(" · ");
+function flagOf(item, grace) {
+  if (item.status === "rebuy") return "Rebuy needed";
+  if (item.status === "suspended") return `Suspended, day ${-item.days} of ${grace}`;
+  if (item.status === "ended") return "Ended";
+  return null;
+}
+
+function itemRow(item, grace) {
+  const tone = item.days < 0 ? colors.danger : item.days === 0 ? colors.danger : colors.warning;
+  const details = [item.serviceLabel, flagOf(item, grace), item.group, item.paymentMethod]
+    .filter(Boolean)
+    .map(escape)
+    .join(" · ");
   const account =
     item.service === "rdp" && item.digirdpEmail
       ? `<div style="margin-top:2px;font-size:12px;color:${colors.muted}">DigiRDP ${escape(item.digirdpEmail)}</div>`
@@ -107,17 +131,35 @@ function itemRow(item) {
 </tr></table>`;
 }
 
-export function reminderEmail(items) {
-  const overdue = items.filter((item) => item.days < 0).length;
-  const [first] = items;
-  const subject =
-    items.length === 1
-      ? `${first.company} ${first.serviceLabel}: ${relativeDays(first.days).toLowerCase()}`
-      : `${plural(items.length, "renewal")} need attention${overdue ? `, ${overdue} overdue` : ""}`;
-  const text = items
+function group(title, items, grace) {
+  if (!items.length) return "";
+  return `<p style="margin:22px 0 10px;font-size:12px;font-weight:600;letter-spacing:0.02em;color:${colors.muted}">${escape(title)}</p>${items
+    .map((item) => itemRow(item, grace))
+    .join("")}`;
+}
+
+export function reminderEmail(digest, round = "noon") {
+  const { expiring, overdue, upcoming, grace, window } = digest;
+  const parts = [];
+  if (expiring.length) parts.push(`${expiring.length} expiring today`);
+  if (overdue.length) parts.push(`${overdue.length} overdue`);
+  if (upcoming.length) parts.push(`${upcoming.length} within ${plural(window, "day")}`);
+
+  const marker = ROUNDS.find((item) => item.key === round);
+  const headline = parts.join(", ") || "Renewals update";
+  const subject = round === "noon" ? headline : `${headline} · ${marker.label}`;
+
+  const text = [...expiring, ...overdue, ...upcoming]
     .map((item) => `${item.company}, ${item.serviceLabel}: ${relativeDays(item.days)} (${formatDate(item.dueDate)})`)
     .join("\n");
-  return { subject, text, html: layout(subject, items.map(itemRow).join("")) };
+
+  const body = [
+    group("Expiring today", expiring, grace),
+    group("Overdue", overdue, grace),
+    group(`Next ${plural(window, "day")}`, upcoming, grace),
+  ].join("");
+
+  return { subject, text, html: layout(headline, body) };
 }
 
 export function testEmail() {

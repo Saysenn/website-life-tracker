@@ -28,8 +28,9 @@ Built with Next.js (App Router, plain JavaScript), Auth.js, Drizzle ORM on SQLit
 * The preview totals the raw price per currency and the USDT to send, with gas listed separately per network
 * Gas fees per payment method in their own currency, since each network is paid in its own token
 * Searchable dropdowns that let you add new groups, payment types and payment methods
-* Daily reminder digest by email, sent 30, 14, 7, 3, 1 and 0 days before an end date (configurable)
-* A reminder goes out every day of the grace period while a service is suspended
+* Daily digest by email at 12:00 Dubai time, plus 15:00 and 18:00 on a day something expires
+* Each digest is grouped into Expiring today, Overdue and the next few days, with the window set in Settings
+* Overdue rows say which day of the grace period they are on, or that they need rebuying
 * In app notifications, optimistic updates, skeleton loaders and toasts
 * Single admin login with rate limiting
 
@@ -113,7 +114,24 @@ Environment variables never reach a deployment that already exists, so redeploy 
    A JSON body means the database and email path are live. A 500 means the tables are missing, a 401 means the secret does not match.
 5. Project, then Cron Jobs, confirm the daily job is listed.
 
-The reminder cron is defined in `vercel.json` and calls `/api/cron/reminders` every day at 05:00 UTC, 09:00 in Dubai, give or take an hour on the Hobby plan. Vercel sends `CRON_SECRET` as a bearer token and the route rejects anything without it. The same run refreshes the USDT rates.
+### 7. Schedule the reminders
+
+Emails go out at **12:00** Dubai time every day, and also at **15:00** and **18:00** on a day something expires. All three call the same route, which works out which round it is from the clock and refuses to send the same round twice.
+
+The free Vercel plan only allows one cron trigger per day, so `vercel.json` covers the 12:00 run and GitHub Actions covers all three. Both are free, and the duplicate 12:00 trigger is harmless because the route deduplicates.
+
+Add two repository secrets under Settings, Secrets and variables, Actions:
+
+| Secret | Value |
+| --- | --- |
+| `APP_URL` | `https://your-app.vercel.app`, no trailing slash |
+| `CRON_SECRET` | the same value as the Vercel variable |
+
+`.github/workflows/reminders.yml` then fires at 08:00, 11:00 and 14:00 UTC. Run it once by hand from the Actions tab to check it works.
+
+Two things to know about GitHub schedules: they can run a few minutes late when GitHub is busy, and GitHub pauses scheduled workflows in a repository with no activity for 60 days. The Vercel cron is unaffected by both, so the daily 12:00 digest keeps arriving either way.
+
+Vercel sends `CRON_SECRET` as a bearer token and the route rejects anything without it. The same run refreshes the USDT rates.
 
 ### When sign in fails
 

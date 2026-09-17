@@ -4,6 +4,12 @@ export const DEFAULT_REMINDER_DAYS = [30, 14, 7, 3, 1, 0];
 
 export const DEFAULT_GRACE_DAYS = 6;
 
+export const ROUNDS = [
+  { key: "noon", hour: 12, label: "midday" },
+  { key: "afternoon", hour: 15, label: "3pm check" },
+  { key: "evening", hour: 18, label: "6pm check" },
+];
+
 export const DEFAULT_CURRENCY = "GBP";
 
 export const DEFAULT_USDT_RATE = 1.35;

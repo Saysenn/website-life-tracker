@@ -72,6 +72,18 @@ export const reminderLog = sqliteTable(
   (table) => [uniqueIndex("reminder_log_unique").on(table.companyId, table.service, table.dueDate, table.threshold)],
 );
 
+export const digestLog = sqliteTable(
+  "digest_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    day: text("day").notNull(),
+    round: text("round").notNull(),
+    items: integer("items").notNull().default(0),
+    sentAt: text("sent_at").notNull().default(now),
+  },
+  (table) => [uniqueIndex("digest_log_unique").on(table.day, table.round)],
+);
+
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
   notifyEmail: text("notify_email"),

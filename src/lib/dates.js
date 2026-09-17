@@ -8,6 +8,14 @@ export function todayIn(timeZone) {
   }
 }
 
+export function hourIn(timeZone) {
+  try {
+    return Number(new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+  } catch {
+    return new Date().getHours();
+  }
+}
+
 export const toISODate = (date) => format(date, "yyyy-MM-dd");
 export const utcStamp = () => new Date().toISOString().slice(0, 19).replace("T", " ");
 export const parseDate = (value) => parseISO(value);

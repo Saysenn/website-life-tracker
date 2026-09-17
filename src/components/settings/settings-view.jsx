@@ -72,7 +72,7 @@ function RemindersSection({ settings, cronTime, timezone, mail }) {
   return (
     <Card
       title="Email reminders"
-      description={`Checked every day at ${cronTime} (${timezone}). One digest email lists everything due.`}
+      description={`Sent at ${cronTime}, ${timezone}. One digest lists what expires today, what is overdue and what is coming up.`}
       actions={<Switch checked={values.remindersEnabled} onCheckedChange={toggleReminders} aria-label="Send reminder emails" />}
     >
       <form
@@ -99,7 +99,7 @@ function RemindersSection({ settings, cronTime, timezone, mail }) {
           />
         </Field>
 
-        <Field label="Remind me" htmlFor="reminder-day" error={errors.reminderDays} hint="Days before the end date. 0 sends on the day itself.">
+        <Field label="Remind me" htmlFor="reminder-day" error={errors.reminderDays} hint="How far ahead the digest looks. The largest value sets the window, so 14 lists everything due in the next 14 days.">
           <div className="flex flex-wrap items-center gap-1.5">
             {values.reminderDays.map((day) => (
               <span key={day} className="inline-flex h-7 items-center gap-1 rounded-full bg-sunken pr-1 pl-2.5 text-sm text-ink-2 animate-pop">

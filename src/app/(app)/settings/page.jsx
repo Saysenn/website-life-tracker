@@ -1,11 +1,12 @@
 import { SettingsView } from "@/components/settings/settings-view";
+import { ROUNDS } from "@/lib/constants";
 import { getCompanies, getGroups, getPricing, getReminderLog, getSettings, TIMEZONE } from "@/lib/data";
 import { defaultRecipient, mailStatus } from "@/lib/mail";
 import { paymentOptions } from "@/lib/options";
 
 export const metadata = { title: "Settings" };
 
-const CRON_UTC_HOUR = 5;
+const clock = (hour) => `${String(hour).padStart(2, "0")}:00`;
 
 export default async function SettingsPage() {
   const [settings, log, pricing, companies, groups] = await Promise.all([
@@ -15,12 +16,8 @@ export default async function SettingsPage() {
     getCompanies(),
     getGroups(),
   ]);
-  const cronTime = new Intl.DateTimeFormat("en-US", {
-    timeZone: TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(Date.UTC(2026, 0, 1, CRON_UTC_HOUR));
+  const [daily, ...extra] = ROUNDS.map((round) => clock(round.hour));
+  const cronTime = `${daily}, plus ${extra.join(" and ")} when something expires that day`;
 
   return (
     <SettingsView
