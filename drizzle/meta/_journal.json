@@ -64,6 +64,13 @@
       "when": 1789633044402,
       "tag": "0008_digest_log",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792147733497,
+      "tag": "0009_digirdp_password",
+      "breakpoints": true
     }
   ]
 }

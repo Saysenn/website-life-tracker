@@ -12,6 +12,7 @@ export function buildPreviewItems(companies, pricing, rules, today, maxDays) {
         if (company[service.closed]) return [];
         const end = company[service.end];
         if (!end || end > until) return [];
+        const start = company[service.start] ?? null;
         const price = priceOf(company, service, pricing);
         const gas = gasFeeOf(company, pricing);
 
@@ -22,10 +23,12 @@ export function buildPreviewItems(companies, pricing, rules, today, maxDays) {
             company: company.name,
             website: company.website,
             account: company.digirdpEmail,
+            hasPassword: company.hasPassword,
             group: company.groupName ?? "No group",
             service: service.key,
             serviceLabel: service.label,
             paymentMethod: company.paymentMethod,
+            start,
             end,
             days: daysUntil(end, today),
             status: serviceState(company, service, today, rules).status,

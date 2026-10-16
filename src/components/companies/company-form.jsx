@@ -21,6 +21,7 @@ const FIELDS = [
   "paymentMethod",
   "currency",
   "digirdpEmail",
+  "digirdpPassword",
   "domainStart",
   "domainEnd",
   "domainPrice",
@@ -267,6 +268,25 @@ export function CompanyForm({ company, options, pricing, today, defaultGroup, dr
                   aria-invalid={invalid("digirdpEmail")}
                   placeholder="account@email.com"
                   autoComplete="off"
+                />
+              </Field>
+            )}
+            {service.key === "rdp" && (
+              <Field
+                label="DigiRDP password"
+                htmlFor="company-digirdpPassword"
+                error={errors.digirdpPassword}
+                className="sm:col-span-2"
+                hint={company?.hasPassword ? "A password is saved. Leave empty to keep it." : "Stored encrypted, copied in one click"}
+              >
+                <Input
+                  id="company-digirdpPassword"
+                  type="password"
+                  value={values.digirdpPassword}
+                  onChange={(event) => set("digirdpPassword", event.target.value)}
+                  aria-invalid={invalid("digirdpPassword")}
+                  placeholder={company?.hasPassword ? "Saved" : "Not set"}
+                  autoComplete="new-password"
                 />
               </Field>
             )}

@@ -1,0 +1,1 @@
+ALTER TABLE `companies` ADD `digirdp_password` text;

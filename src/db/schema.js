@@ -22,6 +22,7 @@ export const companies = sqliteTable(
     paymentMethod: text("payment_method"),
     currency: text("currency"),
     digirdpEmail: text("digirdp_email"),
+  digirdpPassword: text("digirdp_password"),
     domainStart: text("domain_start"),
     domainEnd: text("domain_end"),
     domainClosedAt: text("domain_closed_at"),

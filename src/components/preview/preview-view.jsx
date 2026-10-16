@@ -1,16 +1,21 @@
 "use client";
 
 import { endOfMonth, parseISO } from "date-fns";
-import { CircleCheck } from "lucide-react";
+import { CalendarCheck, CircleCheck } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { startTransition, useOptimistic, useState } from "react";
+import { toast } from "sonner";
+import { setServiceDates } from "@/actions/companies";
+import { CopyPassword } from "@/components/companies/copy-password";
 import { PaymentList } from "@/components/preview/payment-list";
 import { Page, PageHeader } from "@/components/ui/page";
 import { Segmented } from "@/components/ui/segmented";
 import { StatusBadge } from "@/components/ui/status";
+import { Tooltip } from "@/components/ui/tooltip";
 import { daysUntil, formatDate, relativeDays, toISODate } from "@/lib/dates";
 import { formatMoney, formatTotals, formatUsdt } from "@/lib/money";
 import { totalsOf } from "@/lib/preview";
+import { endFrom, SERVICE_BY_KEY } from "@/lib/services";
 import { cn, plural } from "@/lib/utils";
 
 const WINDOWS = [
@@ -35,9 +40,29 @@ function Figure({ label, value, hint, strong }) {
 export function PreviewView({ items, today, currency }) {
   const [range, setRange] = useState("7");
   const [group, setGroup] = useState("all");
+  const [rows, renewRow] = useOptimistic(items, (current, id) => current.filter((item) => item.id !== id));
+
+  function renew(item) {
+    const service = SERVICE_BY_KEY[item.service];
+    const end = endFrom(service, today);
+    startTransition(async () => {
+      renewRow(item.id);
+      const result = await setServiceDates(item.companyId, item.service, { start: today, end });
+      if (result.ok) {
+        toast.success(`${item.company} renewed until ${formatDate(end)}`, {
+          action: {
+            label: "Undo",
+            onClick: () => setServiceDates(item.companyId, item.service, { start: item.start ?? null, end: item.end }),
+          },
+        });
+      } else {
+        toast.error(result.error);
+      }
+    });
+  }
 
   const days = range === "month" ? daysUntil(toISODate(endOfMonth(parseISO(today))), today) : Number(range);
-  const visible = items.filter((item) => item.days <= days);
+  const visible = rows.filter((item) => item.days <= days);
   const groups = [...new Set(visible.map((item) => item.group))].sort();
   const active = group !== "all" && groups.includes(group) ? group : "all";
   const shown = active === "all" ? visible : visible.filter((item) => item.group === active);
@@ -93,6 +118,7 @@ export function PreviewView({ items, today, currency }) {
                   <th className={cn(headClass, "hidden w-[11rem] md:table-cell")}>Status</th>
                   <th className={cn(headClass, "hidden w-[13rem] lg:table-cell")}>Payment</th>
                   <th className={cn(headClass, "w-[13rem] text-right")}>Price</th>
+                  <th className={cn(headClass, "w-[7.5rem] text-right")}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,6 +154,21 @@ export function PreviewView({ items, today, currency }) {
                       ) : (
                         <span className="text-ink-4">No price</span>
                       )}
+                    </td>
+                    <td className={cn(cellClass, "text-right")}>
+                      <div className="flex items-center justify-end gap-0.5">
+                        {item.hasPassword && <CopyPassword companyId={item.companyId} />}
+                        <Tooltip label={`${item.serviceLabel} renewed today`}>
+                          <button
+                            type="button"
+                            aria-label={`Mark ${item.company} renewed today`}
+                            onClick={() => renew(item)}
+                            className="flex size-6.5 items-center justify-center rounded-md text-ink-4 transition-colors hover:bg-hover hover:text-ink"
+                          >
+                            <CalendarCheck className="size-[1.4rem]" />
+                          </button>
+                        </Tooltip>
+                      </div>
                     </td>
                   </tr>
                 ))}

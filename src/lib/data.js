@@ -13,13 +13,15 @@ const byName = (column) => asc(sql`lower(${column})`);
 
 export const getToday = () => todayIn(TIMEZONE);
 
-export const getCompanies = cache(() =>
-  db
+export const getCompanies = cache(async () => {
+  const rows = await db
     .select({ ...getTableColumns(companies), groupName: groups.name })
     .from(companies)
     .leftJoin(groups, eq(companies.groupId, groups.id))
-    .orderBy(byName(companies.name)),
-);
+    .orderBy(byName(companies.name));
+
+  return rows.map(({ digirdpPassword, ...company }) => ({ ...company, hasPassword: Boolean(digirdpPassword) }));
+});
 
 export const getGroups = cache(() => db.select().from(groups).orderBy(byName(groups.name)));
 

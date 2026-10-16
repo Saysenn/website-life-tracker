@@ -15,6 +15,7 @@ export function buildGroupPanels(companies, groups, pricing, rules, today) {
         return {
           id: company.id,
           name: company.name,
+          hasPassword: company.hasPassword,
           account: company.digirdpEmail || company.website || "",
           network: company.paymentMethod || "Not set",
           start: state.start,

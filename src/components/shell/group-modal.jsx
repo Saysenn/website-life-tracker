@@ -4,6 +4,7 @@ import { Archive, CalendarCheck } from "lucide-react";
 import { startTransition, useMemo, useOptimistic } from "react";
 import { toast } from "sonner";
 import { closeService, reopenService, setServiceDates } from "@/actions/companies";
+import { CopyPassword } from "@/components/companies/copy-password";
 import { Dialog } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/ui/status";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -129,6 +130,7 @@ export function GroupModal({ panel, today, currency, onClose }) {
                 </div>
 
                 <div className="flex items-center justify-end gap-0.5">
+                  {row.hasPassword && <CopyPassword companyId={row.id} />}
                   <RowAction label="RDP renewed today" onClick={() => renew(row)}>
                     <CalendarCheck />
                   </RowAction>

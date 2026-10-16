@@ -2,6 +2,7 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { Archive, CalendarCheck, Globe, GripVertical, HardDrive, Monitor } from "lucide-react";
+import { CopyPassword } from "@/components/companies/copy-password";
 import { DaysLeft, StatusBadge } from "@/components/ui/status";
 import { Tooltip } from "@/components/ui/tooltip";
 import { formatDate } from "@/lib/dates";
@@ -156,6 +157,7 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
       </td>
       <td className={cell}>
         <div className="flex items-center justify-end gap-0.5">
+          {service.key === "rdp" && company.hasPassword && <CopyPassword companyId={company.id} />}
           <RowAction label={`${service.label} renewed today`} onClick={() => onRenewToday(company, service)}>
             <CalendarCheck />
           </RowAction>

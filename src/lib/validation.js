@@ -47,6 +47,14 @@ const optionalCurrency = z
   .transform((value) => value.trim().toUpperCase() || null)
   .refine((value) => value === null || /^[A-Z]{3}$/.test(value), "Use a 3 letter code like GBP");
 
+export const accountRowSchema = z.object({
+  id: idSchema.nullable().optional(),
+  name: text(120).min(1, "Company name is required"),
+  group: optionalText(60),
+  account: optionalEmail,
+  password: optionalText(200),
+});
+
 export const companySchema = z
   .object({
     name: text(120).min(1, "Company name is required"),
@@ -56,6 +64,7 @@ export const companySchema = z
     paymentMethod: optionalText(60),
     currency: optionalCurrency,
     digirdpEmail: optionalEmail,
+    digirdpPassword: optionalText(200),
     domainStart: optionalDate,
     domainEnd: optionalDate,
     domainPrice: optionalPrice,
