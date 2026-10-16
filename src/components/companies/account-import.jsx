@@ -143,14 +143,14 @@ export function AccountImport({ companies, groups }) {
             className="animate-rise"
           >
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[60rem] border-separate border-spacing-0 text-sm">
+              <table className="w-full min-w-[72rem] border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr>
                     <th className={cn(headClass, "w-[3rem]")} />
                     <th className={headClass}>Company</th>
                     <th className={cn(headClass, "w-[16rem]")}>Group</th>
                     <th className={cn(headClass, "w-[18rem]")}>Account email</th>
-                    <th className={cn(headClass, "w-[10rem]")}>Password</th>
+                    <th className={cn(headClass, "w-[16rem]")}>Password</th>
                     <th className={cn(headClass, "w-[10rem]")}>Action</th>
                   </tr>
                 </thead>
@@ -181,13 +181,23 @@ export function AccountImport({ companies, groups }) {
                           placeholder="No group"
                         />
                       </td>
-                      <td className={cn(cellClass, "text-ink-2")}>{row.account || <span className="text-ink-4">None</span>}</td>
                       <td className={cellClass}>
-                        {row.password ? (
-                          <span className="text-ink-3">Saved on import</span>
-                        ) : (
-                          <span className="text-ink-4">None</span>
-                        )}
+                        <Input
+                          value={row.account}
+                          onChange={(event) => update(index, { account: event.target.value })}
+                          placeholder="None"
+                          className="h-7 text-sm"
+                        />
+                      </td>
+                      <td className={cellClass}>
+                        <Input
+                          value={row.password}
+                          onChange={(event) => update(index, { password: event.target.value })}
+                          placeholder="None"
+                          spellCheck={false}
+                          autoComplete="off"
+                          className="h-7 font-mono text-sm"
+                        />
                       </td>
                       <td className={cellClass}>
                         {row.duplicateOf ? (
