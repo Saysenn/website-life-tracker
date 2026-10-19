@@ -4,7 +4,7 @@ import { AlertDialog, Dialog as RadixDialog } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { buttonClass } from "./button";
 
-const overlayClass = "fixed inset-0 z-40 bg-ink/20 animate-fade";
+const overlayClass = "fixed inset-0 z-40 bg-ink/45 animate-fade";
 const centerClass =
   "fixed top-1/2 left-1/2 z-50 w-[calc(100vw-3.2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-surface p-6 shadow-float animate-pop focus:outline-none";
 
