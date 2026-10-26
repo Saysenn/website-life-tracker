@@ -20,7 +20,11 @@ export const getCompanies = cache(async () => {
     .leftJoin(groups, eq(companies.groupId, groups.id))
     .orderBy(byName(companies.name));
 
-  return rows.map(({ digirdpPassword, ...company }) => ({ ...company, hasPassword: Boolean(digirdpPassword) }));
+  return rows.map(({ digirdpPassword, providerPassword, ...company }) => ({
+    ...company,
+    hasPassword: Boolean(digirdpPassword),
+    hasProviderPassword: Boolean(providerPassword),
+  }));
 });
 
 export const getGroups = cache(() => db.select().from(groups).orderBy(byName(groups.name)));

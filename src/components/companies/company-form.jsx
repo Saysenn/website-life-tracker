@@ -21,6 +21,7 @@ const FIELDS = [
   "paymentMethod",
   "currency",
   "digirdpEmail",
+  "providerPassword",
   "digirdpPassword",
   "domainStart",
   "domainEnd",
@@ -259,7 +260,13 @@ export function CompanyForm({ company, options, pricing, today, defaultGroup, dr
         {SERVICES.map((service) => (
           <Section key={service.key} title={service.label}>
             {service.key === "rdp" && (
-              <Field label="DigiRDP account email" htmlFor="company-digirdpEmail" error={errors.digirdpEmail} className="sm:col-span-2">
+              <Field
+                label="Provider account email"
+                htmlFor="company-digirdpEmail"
+                error={errors.digirdpEmail}
+                hint="The DigiRDP or TryRDP login"
+                className="sm:col-span-2"
+              >
                 <Input
                   id="company-digirdpEmail"
                   type="email"
@@ -273,11 +280,28 @@ export function CompanyForm({ company, options, pricing, today, defaultGroup, dr
             )}
             {service.key === "rdp" && (
               <Field
-                label="DigiRDP password"
+                label="Provider password"
+                htmlFor="company-providerPassword"
+                error={errors.providerPassword}
+                hint={company?.hasProviderPassword ? "Saved. Leave empty to keep it." : "Stored encrypted"}
+              >
+                <Input
+                  id="company-providerPassword"
+                  type="password"
+                  value={values.providerPassword}
+                  onChange={(event) => set("providerPassword", event.target.value)}
+                  aria-invalid={invalid("providerPassword")}
+                  placeholder={company?.hasProviderPassword ? "Saved" : "Not set"}
+                  autoComplete="new-password"
+                />
+              </Field>
+            )}
+            {service.key === "rdp" && (
+              <Field
+                label="RDP key"
                 htmlFor="company-digirdpPassword"
                 error={errors.digirdpPassword}
-                className="sm:col-span-2"
-                hint={company?.hasPassword ? "A password is saved. Leave empty to keep it." : "Stored encrypted, copied in one click"}
+                hint={company?.hasPassword ? "Saved. Leave empty to keep it." : "Stored encrypted, copied in one click"}
               >
                 <Input
                   id="company-digirdpPassword"

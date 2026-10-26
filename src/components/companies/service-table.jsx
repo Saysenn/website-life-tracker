@@ -24,6 +24,9 @@ export function statusSummary(rows) {
 
 const headClass = "px-2 py-1.5 text-left text-2xs font-medium text-ink-3";
 
+// RDP rows carry an extra account column, so payment waits for more room there
+const paymentCell = (service) => (service.key === "rdp" ? "@min-[108rem]:table-cell" : "@min-[84rem]:table-cell");
+
 export function ServiceTable({ service, rows, pricing, selectedId, onSelect, onRenewToday, onCloseService }) {
   return (
     <div className="@container">
@@ -34,9 +37,12 @@ export function ServiceTable({ service, rows, pricing, selectedId, onSelect, onR
             <th className={cn(headClass, "hidden w-[12rem] @min-[58rem]:table-cell")}>Start date</th>
             <th className={cn(headClass, "w-[12.5rem]")}>{service.endLabel}</th>
             <th className={cn(headClass, "w-[10.5rem]")}>Status</th>
+            {service.key === "rdp" && (
+              <th className={cn(headClass, "hidden w-[20rem] @min-[96rem]:table-cell")}>Provider account</th>
+            )}
             {service.billable && <th className={cn(headClass, "hidden w-[12rem] @min-[68rem]:table-cell")}>Price</th>}
-            <th className={cn(headClass, "hidden w-[13rem] @min-[84rem]:table-cell")}>Payment</th>
-            <th className={cn(headClass, "w-[8rem] text-right")}>Actions</th>
+            <th className={cn(headClass, "hidden w-[13rem]", paymentCell(service))}>Payment</th>
+            <th className={cn(headClass, "text-right", service.key === "rdp" ? "w-[10.5rem]" : "w-[8rem]")}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -89,7 +95,7 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
     data: { company },
     disabled: company.id < 0,
   });
-  const secondary = service.key === "rdp" ? company.digirdpEmail : company.website;
+  const account = service.key === "rdp" && company.digirdpEmail;
   const cell = cn(
     "px-2 py-2.5 align-middle transition-colors duration-100 first:rounded-l-lg last:rounded-r-lg",
     selected ? "bg-selected" : "group-hover:bg-sunken group-focus-visible:bg-sunken",
@@ -113,7 +119,14 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
           <GripVertical className="-ml-1 size-[1.3rem] shrink-0 text-ink-4 opacity-0 transition-opacity group-hover:opacity-100" />
           <div className="min-w-0">
             <p className="truncate font-medium text-ink">{company.name}</p>
-            {secondary && <p className="truncate text-xs text-ink-3">{secondary}</p>}
+            {account ? (
+              <p className="truncate text-xs text-ink-3">
+                <span className="@min-[96rem]:hidden">{account}</span>
+                <span className="hidden @min-[96rem]:inline">{company.website}</span>
+              </p>
+            ) : (
+              company.website && <p className="truncate text-xs text-ink-3">{company.website}</p>
+            )}
           </div>
         </div>
       </td>
@@ -133,6 +146,16 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
       <td className={cell}>
         <StatusBadge status={state.status} />
       </td>
+      {service.key === "rdp" && (
+        <td className={cn(cell, "hidden @min-[96rem]:table-cell")}>
+          <div className="flex items-center gap-1">
+            <span className={cn("min-w-0 flex-1 truncate", company.digirdpEmail ? "text-ink-2" : "text-ink-4")}>
+              {company.digirdpEmail || "Not set"}
+            </span>
+            {company.hasProviderPassword && <CopyPassword companyId={company.id} kind="provider" />}
+          </div>
+        </td>
+      )}
       {service.billable && (
         <td className={cn(cell, "hidden @min-[68rem]:table-cell")}>
           {price === null ? (
@@ -145,7 +168,7 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
           )}
         </td>
       )}
-      <td className={cn(cell, "hidden @min-[84rem]:table-cell")}>
+      <td className={cn(cell, "hidden", paymentCell(service))}>
         {company.paymentMethod ? (
           <div className="leading-tight">
             <p className="truncate text-ink-2">{company.paymentMethod}</p>
@@ -157,6 +180,9 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
       </td>
       <td className={cell}>
         <div className="flex items-center justify-end gap-0.5">
+          {service.key === "rdp" && company.hasProviderPassword && (
+            <CopyPassword companyId={company.id} kind="provider" className="@min-[96rem]:hidden" />
+          )}
           {service.key === "rdp" && company.hasPassword && <CopyPassword companyId={company.id} />}
           <RowAction label={`${service.label} renewed today`} onClick={() => onRenewToday(company, service)}>
             <CalendarCheck />

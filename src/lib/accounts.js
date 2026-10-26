@@ -1,5 +1,5 @@
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LABEL = /^(user(name)?|email|login|account|pass(word)?|pw)\s*[:=]\s*/i;
+const LABEL = /^(user(name)?|email|login|account|pass(word)?|pw|rdp key|key)\s*[:=]\s*/i;
 
 export const normalizeName = (value) =>
   value
@@ -17,7 +17,9 @@ function parseBlock(lines) {
   const [first, ...rest] = lines;
   const account = rest.find((line) => EMAIL.test(line)) ?? "";
   const others = rest.filter((line) => line !== account);
-  return { name: first, account, password: others[others.length - 1] ?? "" };
+  const password = others[others.length - 1] ?? "";
+  const providerPassword = others.length > 1 ? others[others.length - 2] : "";
+  return { name: first, account, providerPassword, password };
 }
 
 export function parseAccounts(text, groups = []) {

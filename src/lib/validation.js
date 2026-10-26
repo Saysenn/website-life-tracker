@@ -52,6 +52,7 @@ export const accountRowSchema = z.object({
   name: text(120).min(1, "Company name is required"),
   group: optionalText(60),
   account: optionalEmail,
+  providerPassword: optionalText(200),
   password: optionalText(200),
 });
 
@@ -64,6 +65,7 @@ export const companySchema = z
     paymentMethod: optionalText(60),
     currency: optionalCurrency,
     digirdpEmail: optionalEmail,
+    providerPassword: optionalText(200),
     digirdpPassword: optionalText(200),
     domainStart: optionalDate,
     domainEnd: optionalDate,

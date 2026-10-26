@@ -1,7 +1,7 @@
 "use client";
 
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
-import { Building2, FolderPlus, Plus, Search, SearchX } from "lucide-react";
+import { Building2, Download, FolderPlus, Plus, Search, SearchX } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { startTransition, useEffect, useMemo, useOptimistic, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import { matches, plural } from "@/lib/utils";
 import { CompanyDetails } from "./company-details";
 import { CompanyForm } from "./company-form";
 import { CompanyPanel } from "./company-panel";
+import { ExportDialog } from "./export-dialog";
 import { GroupDialog } from "./group-dialog";
 import { GroupSection } from "./group-section";
 import { DragCard } from "./service-table";
@@ -115,6 +116,7 @@ export function CompaniesView({ companies, groups, nameHistory, rules, pricing, 
   const [draft, setDraft] = useState(null);
   const [groupDialog, setGroupDialog] = useState(null);
   const [groupToDelete, setGroupToDelete] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const [dragging, setDragging] = useState(null);
   const searchRef = useRef(null);
 
@@ -473,6 +475,10 @@ export function CompaniesView({ companies, groups, nameHistory, rules, pricing, 
             description={`${plural(items.length, "company", "companies")} across ${plural(groupList.length, "group")}`}
             actions={
               <>
+                <Button variant="secondary" onClick={() => setExporting(true)}>
+                  <Download />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
                 <Button variant="secondary" onClick={() => setGroupDialog({ group: null })}>
                   <FolderPlus />
                   <span className="hidden sm:inline">New group</span>
@@ -598,6 +604,8 @@ export function CompaniesView({ companies, groups, nameHistory, rules, pricing, 
           />
         ) : null}
       </CompanyPanel>
+
+      <ExportDialog open={exporting} onOpenChange={setExporting} companies={items} groups={groupList} />
 
       <GroupDialog
         state={groupDialog}

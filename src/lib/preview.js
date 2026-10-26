@@ -24,6 +24,7 @@ export function buildPreviewItems(companies, pricing, rules, today, maxDays) {
             website: company.website,
             account: company.digirdpEmail,
             hasPassword: company.hasPassword,
+            hasProviderPassword: company.hasProviderPassword,
             group: company.groupName ?? "No group",
             service: service.key,
             serviceLabel: service.label,

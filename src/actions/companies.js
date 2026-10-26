@@ -12,6 +12,12 @@ import { seal, unseal } from "@/lib/vault";
 
 const validId = (value) => idSchema.safeParse(value).success;
 
+const SECRET_FIELDS = ["providerPassword", "digirdpPassword"];
+const SECRETS = {
+  key: { column: companies.digirdpPassword, missing: "No RDP key saved for this company." },
+  provider: { column: companies.providerPassword, missing: "No provider password saved for this company." },
+};
+
 export async function saveCompany(companyId, input) {
   if (!(await isAdmin())) return fail(SESSION_EXPIRED);
   if (companyId !== null && !validId(companyId)) return fail("Unknown company.");
@@ -22,8 +28,10 @@ export async function saveCompany(companyId, input) {
   const { group, ...values } = parsed.data;
   values.groupId = await ensureGroup(group, values);
 
-  if (values.digirdpPassword) values.digirdpPassword = seal(values.digirdpPassword);
-  else delete values.digirdpPassword;
+  for (const key of SECRET_FIELDS) {
+    if (values[key]) values[key] = seal(values[key]);
+    else delete values[key];
+  }
 
   if (companyId === null) {
     const [row] = await db.insert(companies).values(values).returning({ id: companies.id });
@@ -113,15 +121,16 @@ export async function setServiceDates(companyId, serviceKey, dates) {
   return done();
 }
 
-export async function revealPassword(companyId) {
+export async function revealPassword(companyId, kind = "key") {
   if (!(await isAdmin())) return fail(SESSION_EXPIRED);
-  if (!validId(companyId)) return fail("Unknown company.");
+  const secret = SECRETS[kind];
+  if (!validId(companyId) || !secret) return fail("Unknown company.");
 
-  const [row] = await db.select({ secret: companies.digirdpPassword }).from(companies).where(eq(companies.id, companyId));
+  const [row] = await db.select({ secret: secret.column }).from(companies).where(eq(companies.id, companyId));
   if (!row) return fail("This company no longer exists.");
 
   const password = unseal(row.secret);
-  return password ? ok({ password }) : fail("No password saved for this company.");
+  return password ? ok({ password }) : fail(secret.missing);
 }
 
 export async function importAccounts(rows) {
@@ -134,10 +143,11 @@ export async function importAccounts(rows) {
   for (const row of rows) {
     const parsed = accountRowSchema.safeParse(row);
     if (!parsed.success) continue;
-    const { id, name, group, account, password } = parsed.data;
+    const { id, name, group, account, providerPassword, password } = parsed.data;
 
     const values = {
       ...(account ? { digirdpEmail: account } : {}),
+      ...(providerPassword ? { providerPassword: seal(providerPassword) } : {}),
       ...(password ? { digirdpPassword: seal(password) } : {}),
     };
 

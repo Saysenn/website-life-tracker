@@ -14,7 +14,8 @@ import { cn, plural } from "@/lib/utils";
 const SAMPLE = `Milkman
 Acme Trading
 acme@inbox.eu
-sup3rsecret
+providerpass
+rdp-key-1234
 
 Bright Path
 bright@inbox.eu
@@ -68,6 +69,7 @@ export function AccountImport({ companies, groups }) {
           name: row.name,
           group: row.group,
           account: row.account,
+          providerPassword: row.providerPassword,
           password: row.password,
         })),
       );
@@ -100,7 +102,7 @@ export function AccountImport({ companies, groups }) {
       >
         <Card
           title="Your list"
-          description="One company per block, with the account email and password on their own lines"
+          description="One company per block: provider email, provider password, then RDP key, each on its own line"
           actions={
             text ? (
               <Button
@@ -143,14 +145,15 @@ export function AccountImport({ companies, groups }) {
             className="animate-rise"
           >
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[72rem] border-separate border-spacing-0 text-sm">
+              <table className="w-full min-w-[88rem] border-separate border-spacing-0 text-sm">
                 <thead>
                   <tr>
                     <th className={cn(headClass, "w-[3rem]")} />
                     <th className={headClass}>Company</th>
                     <th className={cn(headClass, "w-[16rem]")}>Group</th>
                     <th className={cn(headClass, "w-[18rem]")}>Account email</th>
-                    <th className={cn(headClass, "w-[16rem]")}>Password</th>
+                    <th className={cn(headClass, "w-[16rem]")}>Provider password</th>
+                    <th className={cn(headClass, "w-[16rem]")}>RDP key</th>
                     <th className={cn(headClass, "w-[10rem]")}>Action</th>
                   </tr>
                 </thead>
@@ -191,6 +194,16 @@ export function AccountImport({ companies, groups }) {
                       </td>
                       <td className={cellClass}>
                         <Input
+                          value={row.providerPassword}
+                          onChange={(event) => update(index, { providerPassword: event.target.value })}
+                          placeholder="None"
+                          spellCheck={false}
+                          autoComplete="off"
+                          className="h-7 font-mono text-sm"
+                        />
+                      </td>
+                      <td className={cellClass}>
+                        <Input
                           value={row.password}
                           onChange={(event) => update(index, { password: event.target.value })}
                           placeholder="None"
@@ -222,7 +235,7 @@ export function AccountImport({ companies, groups }) {
               <FileText className="size-[2.2rem] text-ink-4" strokeWidth={1.5} />
               <p className="mt-2 text-sm font-medium">Nothing recognised yet</p>
               <p className="mt-0.5 max-w-[40rem] text-xs text-ink-3">
-                Keep one company per block, separated by a blank line, with the email and password on their own lines.
+                Keep one company per block, separated by a blank line, with the email, password and RDP key on their own lines.
               </p>
             </div>
           </Card>
@@ -235,7 +248,7 @@ export function AccountImport({ companies, groups }) {
               <p className="mt-2 text-sm font-medium">Nothing saves until you press Import</p>
               <p className="mt-0.5 max-w-[42rem] text-xs text-ink-3">
                 Group headings carry down to the blocks beneath them, companies you already track are updated instead of
-                duplicated, and passwords are encrypted before they are stored.
+                duplicated, and passwords and keys are encrypted before they are stored. A block with a single secret line saves it as the RDP key.
               </p>
             </div>
           </Card>

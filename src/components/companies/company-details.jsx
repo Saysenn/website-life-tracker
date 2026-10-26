@@ -25,6 +25,7 @@ import { daysUntil, formatDate, formatTimestamp, relativeDays } from "@/lib/date
 import { formatMoney, formatUsdt, priceOf, usdtOf } from "@/lib/money";
 import { endFrom, serviceStates } from "@/lib/services";
 import { cn } from "@/lib/utils";
+import { CopyPassword } from "./copy-password";
 import { SERVICE_ICONS } from "./service-table";
 
 const meterTones = { ended: "bg-danger", renewal: "bg-amber", active: "bg-data", upcoming: "bg-data", unset: "bg-ink-4" };
@@ -172,8 +173,17 @@ function ServiceCard({ state, company, pricing, today, timezone, pending, onRene
       )}
       {service.key === "rdp" && (
         <div className="mt-3">
-          <p className="text-2xs text-ink-3">DigiRDP account</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-2xs text-ink-3">Provider account</p>
+            <div className="-my-1 flex items-center gap-0.5">
+              {company.hasProviderPassword && <CopyPassword companyId={company.id} kind="provider" />}
+              {company.hasPassword && <CopyPassword companyId={company.id} kind="key" />}
+            </div>
+          </div>
           {company.digirdpEmail ? <CopyText value={company.digirdpEmail} /> : <p className="mt-0.5 text-sm text-ink-4">Not set</p>}
+          <p className="mt-1 text-2xs text-ink-4">
+            Password {company.hasProviderPassword ? "saved" : "not set"} · RDP key {company.hasPassword ? "saved" : "not set"}
+          </p>
         </div>
       )}
     </div>

@@ -130,6 +130,7 @@ export function GroupModal({ panel, today, currency, onClose }) {
                 </div>
 
                 <div className="flex items-center justify-end gap-0.5">
+                  {row.hasProviderPassword && <CopyPassword companyId={row.id} kind="provider" />}
                   {row.hasPassword && <CopyPassword companyId={row.id} />}
                   <RowAction label="RDP renewed today" onClick={() => renew(row)}>
                     <CalendarCheck />

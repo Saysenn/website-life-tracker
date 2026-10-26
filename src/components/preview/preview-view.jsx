@@ -157,6 +157,7 @@ export function PreviewView({ items, today, currency }) {
                     </td>
                     <td className={cn(cellClass, "text-right")}>
                       <div className="flex items-center justify-end gap-0.5">
+                        {item.hasProviderPassword && <CopyPassword companyId={item.companyId} kind="provider" />}
                         {item.hasPassword && <CopyPassword companyId={item.companyId} />}
                         <Tooltip label={`${item.serviceLabel} renewed today`}>
                           <button
