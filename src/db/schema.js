@@ -24,6 +24,8 @@ export const companies = sqliteTable(
     digirdpEmail: text("digirdp_email"),
     providerPassword: text("provider_password"),
     digirdpPassword: text("digirdp_password"),
+    rdpHost: text("rdp_host"),
+    rdpUsername: text("rdp_username"),
     domainStart: text("domain_start"),
     domainEnd: text("domain_end"),
     domainClosedAt: text("domain_closed_at"),

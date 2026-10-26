@@ -140,7 +140,7 @@ export function CompaniesView({ companies, groups, nameHistory, rules, pricing, 
   const searched = useMemo(
     () =>
       items.filter((company) =>
-        matches(query, company.name, company.website, company.digirdpEmail, company.paymentMethod, company.paymentType, company.notes),
+        matches(query, company.name, company.website, company.digirdpEmail, company.rdpHost, company.paymentMethod, company.paymentType, company.notes),
       ),
     [items, query],
   );

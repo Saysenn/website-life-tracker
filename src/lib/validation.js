@@ -67,6 +67,8 @@ export const companySchema = z
     digirdpEmail: optionalEmail,
     providerPassword: optionalText(200),
     digirdpPassword: optionalText(200),
+    rdpHost: optionalText(120),
+    rdpUsername: optionalText(120),
     domainStart: optionalDate,
     domainEnd: optionalDate,
     domainPrice: optionalPrice,

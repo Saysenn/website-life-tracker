@@ -61,6 +61,8 @@ export const EXPORT_SECTIONS = [
       { key: "providerEmail", label: "Provider email", width: 28 },
       { key: "providerPassword", label: "Provider password", type: "secret", width: 20 },
       { key: "rdpKey", label: "RDP key", type: "secret", width: 22 },
+      { key: "rdpHost", label: "Server IP", width: 16 },
+      { key: "rdpUsername", label: "RDP username", width: 15 },
     ],
   },
   { key: "notes", label: "Notes", color: "slate", columns: [{ key: "notes", label: "Notes", width: 36 }] },
@@ -88,6 +90,8 @@ export function exportRow(company, secrets, pricing, rules, today) {
     providerEmail: company.digirdpEmail ?? "",
     providerPassword: secrets.providerPassword,
     rdpKey: secrets.rdpKey,
+    rdpHost: company.rdpHost ?? "",
+    rdpUsername: company.rdpUsername ?? "",
     notes: company.notes ?? "",
   };
 

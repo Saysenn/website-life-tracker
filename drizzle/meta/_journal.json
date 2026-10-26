@@ -78,6 +78,13 @@
       "when": 1793030814996,
       "tag": "0010_provider_password",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793033057166,
+      "tag": "0011_rdp_server",
+      "breakpoints": true
     }
   ]
 }

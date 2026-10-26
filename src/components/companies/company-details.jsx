@@ -45,22 +45,22 @@ function Detail({ label, value, extra }) {
   );
 }
 
-function CopyText({ value }) {
+function CopyText({ value, what = "email" }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
-      toast.success("Email copied");
+      toast.success(`${what[0].toUpperCase()}${what.slice(1)} copied`);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      toast.error("Could not copy the email");
+      toast.error(`Could not copy the ${what}`);
     }
   }
 
   return (
-    <Tooltip label="Copy email">
+    <Tooltip label={`Copy ${what}`}>
       <button type="button" onClick={copy} className="group/copy mt-0.5 flex max-w-full items-center gap-1.5 text-sm text-ink transition-colors hover:text-data">
       <span className="truncate">{value}</span>
         {copied ? (
@@ -184,6 +184,18 @@ function ServiceCard({ state, company, pricing, today, timezone, pending, onRene
           <p className="mt-1 text-2xs text-ink-4">
             Password {company.hasProviderPassword ? "saved" : "not set"} · RDP key {company.hasPassword ? "saved" : "not set"}
           </p>
+          {(company.rdpHost || company.rdpUsername) && (
+            <div className="mt-2.5 grid grid-cols-2 gap-3">
+              <div className="min-w-0">
+                <p className="text-2xs text-ink-3">Server IP</p>
+                {company.rdpHost ? <CopyText value={company.rdpHost} what="server IP" /> : <p className="mt-0.5 text-sm text-ink-4">Not set</p>}
+              </div>
+              <div className="min-w-0">
+                <p className="text-2xs text-ink-3">Username</p>
+                {company.rdpUsername ? <CopyText value={company.rdpUsername} what="username" /> : <p className="mt-0.5 text-sm text-ink-4">Not set</p>}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

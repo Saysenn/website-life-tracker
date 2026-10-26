@@ -23,6 +23,8 @@ const FIELDS = [
   "digirdpEmail",
   "providerPassword",
   "digirdpPassword",
+  "rdpHost",
+  "rdpUsername",
   "domainStart",
   "domainEnd",
   "domainPrice",
@@ -311,6 +313,31 @@ export function CompanyForm({ company, options, pricing, today, defaultGroup, dr
                   aria-invalid={invalid("digirdpPassword")}
                   placeholder={company?.hasPassword ? "Saved" : "Not set"}
                   autoComplete="new-password"
+                />
+              </Field>
+            )}
+            {service.key === "rdp" && (
+              <Field label="Server IP" htmlFor="company-rdpHost" error={errors.rdpHost}>
+                <Input
+                  id="company-rdpHost"
+                  value={values.rdpHost}
+                  onChange={(event) => set("rdpHost", event.target.value)}
+                  aria-invalid={invalid("rdpHost")}
+                  placeholder="23.229.66.168"
+                  inputMode="decimal"
+                  autoComplete="off"
+                />
+              </Field>
+            )}
+            {service.key === "rdp" && (
+              <Field label="RDP username" htmlFor="company-rdpUsername" error={errors.rdpUsername}>
+                <Input
+                  id="company-rdpUsername"
+                  value={values.rdpUsername}
+                  onChange={(event) => set("rdpUsername", event.target.value)}
+                  aria-invalid={invalid("rdpUsername")}
+                  placeholder="Administrator"
+                  autoComplete="off"
                 />
               </Field>
             )}
