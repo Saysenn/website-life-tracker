@@ -11,7 +11,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { daysUntil, formatDate, relativeDays } from "@/lib/dates";
 import { panelTotals } from "@/lib/group-panel";
 import { formatMoney, formatTotals, formatUsdt } from "@/lib/money";
-import { BILLABLE, endFrom } from "@/lib/services";
+import { BILLABLE, endFrom, termOf } from "@/lib/services";
 import { cn, plural } from "@/lib/utils";
 
 const service = BILLABLE[0];
@@ -59,7 +59,7 @@ export function GroupModal({ panel, today, currency, onClose }) {
   const totals = useMemo(() => panelTotals(rows, today), [rows, today]);
 
   function renew(row) {
-    const end = endFrom(service, today);
+    const end = endFrom(service, today, termOf(row.start, row.end, service));
     startTransition(async () => {
       applyRows({ type: "renew", id: row.id, start: today, end, days: daysUntil(end, today) });
       const result = await setServiceDates(row.id, service.key, { start: today, end });

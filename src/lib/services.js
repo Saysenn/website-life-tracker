@@ -55,7 +55,24 @@ export const DEFAULT_RULES = { window: 1, grace: DEFAULT_GRACE_DAYS };
 
 export const SERVICE_BY_KEY = Object.fromEntries(SERVICES.map((service) => [service.key, service]));
 
-export const endFrom = (service, start) => shiftMonths(start, service.months);
+export const TERMS = [
+  { months: 1, label: "1 month" },
+  { months: 3, label: "3 months" },
+  { months: 6, label: "6 months" },
+  { months: 12, label: "1 year" },
+  { months: 24, label: "2 years" },
+];
+
+export const termLabel = (months) => TERMS.find((term) => term.months === months)?.label ?? `${months} months`;
+
+// months between the saved start and end, falling back to the service default
+export function termOf(start, end, service) {
+  if (!start || !end) return service.months;
+  const match = TERMS.find((term) => shiftMonths(start, term.months) === end);
+  return match?.months ?? service.months;
+}
+
+export const endFrom = (service, start, months = service.months) => shiftMonths(start, months);
 
 export const STATUSES = {
   active: "Active",

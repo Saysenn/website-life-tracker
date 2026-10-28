@@ -15,7 +15,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { daysUntil, formatDate, relativeDays, toISODate } from "@/lib/dates";
 import { formatMoney, formatTotals, formatUsdt } from "@/lib/money";
 import { totalsOf } from "@/lib/preview";
-import { endFrom, SERVICE_BY_KEY } from "@/lib/services";
+import { endFrom, SERVICE_BY_KEY, termOf } from "@/lib/services";
 import { cn, plural } from "@/lib/utils";
 
 const WINDOWS = [
@@ -44,7 +44,7 @@ export function PreviewView({ items, today, currency }) {
 
   function renew(item) {
     const service = SERVICE_BY_KEY[item.service];
-    const end = endFrom(service, today);
+    const end = endFrom(service, today, termOf(item.start, item.end, service));
     startTransition(async () => {
       renewRow(item.id);
       const result = await setServiceDates(item.companyId, item.service, { start: today, end });

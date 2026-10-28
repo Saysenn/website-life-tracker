@@ -23,7 +23,7 @@ import { DaysLeft, StatusBadge } from "@/components/ui/status";
 import { Tooltip } from "@/components/ui/tooltip";
 import { daysUntil, formatDate, formatTimestamp, relativeDays } from "@/lib/dates";
 import { formatMoney, formatUsdt, priceOf, usdtOf } from "@/lib/money";
-import { endFrom, serviceStates } from "@/lib/services";
+import { endFrom, serviceStates, TERMS, termOf } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import { CopyPassword } from "./copy-password";
 import { SERVICE_ICONS } from "./service-table";
@@ -93,6 +93,9 @@ function ServiceCard({ state, company, pricing, today, timezone, pending, onRene
   const Icon = SERVICE_ICONS[service.key];
   const total = start && end ? daysUntil(end, start) : 0;
   const progress = total > 0 ? Math.min(1, Math.max(0, daysUntil(today, start) / total)) : null;
+  const months = termOf(start, end, service);
+  const starts = end === today ? [end] : [end, today];
+  const fromLabel = (date) => (date === today ? "From today" : `From ${formatDate(date)}`);
 
   return (
     <div className="rounded-xl bg-sunken/70 p-3.5">
@@ -115,14 +118,18 @@ function ServiceCard({ state, company, pricing, today, timezone, pending, onRene
                     </Button>
                   }
                 >
-                  <MenuLabel>Renew for {service.term}</MenuLabel>
-                  {(end === today ? [end] : [end, today]).map((start) => (
-                    <MenuItem key={start} onSelect={() => onRenew(service, start)}>
-                      {start === today ? "From today" : `From ${formatDate(start)}`}
-                      <span className="ml-auto pl-4 text-xs text-ink-4 tabular-nums">
-                        Until {formatDate(endFrom(service, start))}
-                      </span>
-                    </MenuItem>
+                  {starts.map((from) => (
+                    <div key={from}>
+                      <MenuLabel>{fromLabel(from)}</MenuLabel>
+                      {TERMS.map((term) => (
+                        <MenuItem key={term.months} onSelect={() => onRenew(service, from, term.months)}>
+                          <span className={cn(term.months === months && "font-medium text-ink")}>{term.label}</span>
+                          <span className="ml-auto pl-4 text-xs text-ink-4 tabular-nums">
+                            Until {formatDate(endFrom(service, from, term.months))}
+                          </span>
+                        </MenuItem>
+                      ))}
+                    </div>
                   ))}
                 </Menu>
               ) : (

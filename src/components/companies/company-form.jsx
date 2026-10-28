@@ -7,8 +7,9 @@ import { Combobox } from "@/components/ui/combobox";
 import { DateField } from "@/components/ui/date-field";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { COMMON_CURRENCIES, DEFAULT_TLD, WEBSITE_TLDS } from "@/lib/constants";
+import { shiftMonths } from "@/lib/dates";
 import { formatMoney, formatUsdt, usdtOf } from "@/lib/money";
-import { endFrom, SERVICES } from "@/lib/services";
+import { endFrom, SERVICES, TERMS, termOf } from "@/lib/services";
 import { cn } from "@/lib/utils";
 import { companySchema, firstErrors } from "@/lib/validation";
 import { replaceTld, suggestWebsite } from "@/lib/website";
@@ -77,6 +78,30 @@ function Section({ title, children }) {
   );
 }
 
+function TermPicker({ start, end, onPick }) {
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {TERMS.map((term) => {
+        const active = end === shiftMonths(start, term.months);
+        return (
+          <button
+            key={term.months}
+            type="button"
+            onClick={() => onPick(term.months)}
+            aria-pressed={active}
+            className={cn(
+              "h-6 rounded-md px-2 text-xs transition-colors",
+              active ? "bg-ink text-ground" : "bg-sunken text-ink-2 hover:bg-hover hover:text-ink",
+            )}
+          >
+            {term.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CompanyForm({ company, options, pricing, today, defaultGroup, draft, onCancel, onSubmit }) {
   const [values, setValues] = useState(() => draft?.values ?? initialValues(company, defaultGroup, options.groups));
   const [errors, setErrors] = useState(() => draft?.errors ?? {});
@@ -115,8 +140,14 @@ export function CompanyForm({ company, options, pricing, today, defaultGroup, dr
   }
 
   function setStart(service, value) {
+    const months = termOf(values[service.start], values[service.end], service);
     set(service.start, value);
-    if (value) set(service.end, endFrom(service, value));
+    if (value) set(service.end, endFrom(service, value, months));
+  }
+
+  function setTerm(service, months) {
+    set(service.end, endFrom(service, values[service.start] || today, months));
+    if (!values[service.start]) set(service.start, today);
   }
 
   function selectGroup(name) {
@@ -354,7 +385,7 @@ export function CompanyForm({ company, options, pricing, today, defaultGroup, dr
               label={service.endLabel}
               htmlFor={`company-${service.end}`}
               error={errors[service.end]}
-              hint={`Fills in ${service.term} after the start date`}
+              hint="Pick a date or a length from the start date"
             >
               <DateField
                 id={`company-${service.end}`}
@@ -362,6 +393,11 @@ export function CompanyForm({ company, options, pricing, today, defaultGroup, dr
                 onChange={(value) => set(service.end, value)}
                 invalid={invalid(service.end)}
                 today={today}
+              />
+              <TermPicker
+                start={values[service.start] || today}
+                end={values[service.end]}
+                onPick={(months) => setTerm(service, months)}
               />
             </Field>
             <Field

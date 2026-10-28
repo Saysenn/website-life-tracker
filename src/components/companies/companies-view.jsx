@@ -17,7 +17,7 @@ import { useStoredState } from "@/hooks/use-stored-state";
 import { formatDate, utcStamp } from "@/lib/dates";
 import { addPrice, priceOf, usdtOf } from "@/lib/money";
 import { paymentOptions } from "@/lib/options";
-import { endFrom, isArchived, matchesStatus, openStates, SERVICES, serviceState } from "@/lib/services";
+import { endFrom, isArchived, matchesStatus, openStates, SERVICES, serviceState, termOf } from "@/lib/services";
 import { matches, plural } from "@/lib/utils";
 import { CompanyDetails } from "./company-details";
 import { CompanyForm } from "./company-form";
@@ -388,7 +388,8 @@ export function CompaniesView({ companies, groups, nameHistory, rules, pricing, 
 
   function handleRenewToday(company, service) {
     const previous = { start: company[service.start], end: company[service.end] };
-    updateDates(company, service, { start: today, end: endFrom(service, today) }, previous);
+    const months = termOf(previous.start, previous.end, service);
+    updateDates(company, service, { start: today, end: endFrom(service, today, months) }, previous);
   }
 
   function handleCloseService(company, service) {
@@ -413,9 +414,9 @@ export function CompaniesView({ companies, groups, nameHistory, rules, pricing, 
     });
   }
 
-  function handleRenew(company, service, start) {
+  function handleRenew(company, service, start, months) {
     const previous = { start: company[service.start], end: company[service.end] };
-    updateDates(company, service, { start, end: endFrom(service, start) }, previous);
+    updateDates(company, service, { start, end: endFrom(service, start, months) }, previous);
   }
 
   function handleSaveGroup(group, input) {
@@ -598,7 +599,7 @@ export function CompaniesView({ companies, groups, nameHistory, rules, pricing, 
             onEdit={() => setEditingId(selected.id)}
             onDelete={() => handleDelete(selected)}
             onMove={(groupId) => handleMove(selected, groupId)}
-            onRenew={(service, start) => handleRenew(selected, service, start)}
+            onRenew={(service, start, months) => handleRenew(selected, service, start, months)}
             onCloseService={(service) => handleCloseService(selected, service)}
             onReopenService={(service) => handleReopenService(selected, service)}
           />
