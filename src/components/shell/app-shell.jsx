@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, BookOpen, Building2, ClipboardPaste, LayoutGrid, LogOut, Menu as MenuIcon, Receipt, Settings } from "lucide-react";
+import { Archive, BookOpen, Building2, ClipboardPaste, LayoutGrid, LogOut, Menu as MenuIcon, Receipt, Settings, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -19,6 +19,7 @@ const NAV = [
   { href: "/archive", label: "Archive", icon: Archive },
   { href: "/import", label: "Import", icon: ClipboardPaste },
   { href: "/guides", label: "Guides", icon: BookOpen },
+  { href: "/tools", label: "Tools", icon: Wrench },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
