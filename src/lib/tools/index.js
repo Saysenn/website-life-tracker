@@ -1,5 +1,12 @@
 export const TOOLS = [
   {
+    slug: "pdf-editor",
+    title: "PDF editor",
+    summary: "Change existing text and fonts, add text, images and signatures, whiteout or highlight, and rearrange pages.",
+    icon: "pdf",
+    tags: ["Edit text", "Sign", "Pages"],
+  },
+  {
     slug: "metadata-cleaner",
     title: "Metadata cleaner",
     summary: "Strip GPS, camera, author and date info from photos, PDFs, Office docs, audio and video — one file or hundreds.",

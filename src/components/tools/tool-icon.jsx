@@ -1,6 +1,6 @@
-import { Eraser, ImageUp, Wrench } from "lucide-react";
+import { Eraser, FilePen, ImageUp, Wrench } from "lucide-react";
 
-const ICONS = { eraser: Eraser, image: ImageUp };
+const ICONS = { eraser: Eraser, image: ImageUp, pdf: FilePen };
 
 export function ToolIcon({ name, ...props }) {
   const Icon = ICONS[name] ?? Wrench;
