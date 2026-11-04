@@ -12,7 +12,10 @@ import { Choice, CopyButton, RunButton, Select, SmallButton } from "./controls";
 
 const saveText = (text, name, type = "text/plain") => downloadBlob(new Blob([text], { type: `${type};charset=utf-8` }), name);
 
-function Results({ entries, timestamps, onTimestamps, onSeek, file, kind, extraDownloads }) {
+export const saveTranscript = saveText;
+
+/** Results list with copy/download. `name` is used for file names; `seekHref` turns timestamps into links instead of seek buttons. */
+export function Results({ entries, timestamps, onTimestamps, onSeek, seekHref, name, kind, extraDownloads }) {
   const text = toPlainText(entries, timestamps);
   const joined = kind === "screen" ? entries.map((entry) => (timestamps ? `[${fmtTime(entry.start)}]\n${entry.text}` : entry.text)).join("\n\n") : text;
 
@@ -24,7 +27,7 @@ function Results({ entries, timestamps, onTimestamps, onSeek, file, kind, extraD
           Timestamps
         </label>
         <CopyButton text={joined} label="Copy all" />
-        <SmallButton onClick={() => saveText(joined, `${baseName(file.name)}-${kind === "screen" ? "screen-text" : "transcript"}.txt`)}>
+        <SmallButton onClick={() => saveText(joined, `${baseName(name)}-${kind === "screen" ? "screen-text" : "transcript"}.txt`)}>
           <Download />
           .txt
         </SmallButton>
@@ -33,14 +36,26 @@ function Results({ entries, timestamps, onTimestamps, onSeek, file, kind, extraD
       <ol className="flex flex-col divide-y divide-grid overflow-hidden rounded-2xl bg-surface shadow-card">
         {entries.map((entry) => (
           <li key={`${entry.start}-${entry.id ?? ""}`} className="flex gap-3 px-3.5 py-2.5">
-            <button
-              type="button"
-              onClick={() => onSeek(entry.start)}
-              title="Play from here"
-              className="h-6 shrink-0 rounded-md bg-sunken px-1.5 text-xs font-semibold text-ink-2 tabular-nums hover:bg-hover hover:text-ink"
-            >
-              {fmtTime(entry.start)}
-            </button>
+            {seekHref ? (
+              <a
+                href={seekHref(entry.start)}
+                target="_blank"
+                rel="noreferrer"
+                title="Watch from here on YouTube"
+                className="flex h-6 shrink-0 items-center rounded-md bg-sunken px-1.5 text-xs font-semibold text-ink-2 tabular-nums hover:bg-hover hover:text-ink"
+              >
+                {fmtTime(entry.start)}
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSeek(entry.start)}
+                title="Play from here"
+                className="h-6 shrink-0 rounded-md bg-sunken px-1.5 text-xs font-semibold text-ink-2 tabular-nums hover:bg-hover hover:text-ink"
+              >
+                {fmtTime(entry.start)}
+              </button>
+            )}
             <p className="min-w-0 flex-1 text-sm leading-relaxed whitespace-pre-wrap select-text">{entry.text}</p>
           </li>
         ))}
@@ -122,7 +137,7 @@ export function TranscriptPanel({ file, onSeek }) {
           timestamps={timestamps}
           onTimestamps={setTimestamps}
           onSeek={onSeek}
-          file={file}
+          name={file.name}
           kind="speech"
           extraDownloads={
             <>
@@ -204,7 +219,7 @@ export function ScreenTextPanel({ file, src, onSeek }) {
       </div>
 
       {entries.length > 0 && (
-        <Results entries={entries} timestamps={timestamps} onTimestamps={setTimestamps} onSeek={onSeek} file={file} kind="screen" />
+        <Results entries={entries} timestamps={timestamps} onTimestamps={setTimestamps} onSeek={onSeek} name={file.name} kind="screen" />
       )}
       {finished && !entries.length && (
         <p className="rounded-2xl bg-surface p-4 text-center text-sm text-ink-3 shadow-card">No readable text found on screen.</p>

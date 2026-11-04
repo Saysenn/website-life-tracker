@@ -5,9 +5,10 @@ import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { formatBytes } from "@/lib/tools/files";
 import { fetchVideo, findUrl, platformOf } from "@/lib/tools/video/link";
 import { RunButton } from "./controls";
+import { loadYouTube } from "./youtube-panel";
 
-/** "Or paste a link" box. Direct video links are downloaded; platform links get an explanation. */
-export const LinkField = forwardRef(function LinkField({ onFile }, ref) {
+/** "Or paste a link" box. YouTube links go straight to the transcript; direct video links are downloaded; other platforms get an explanation. */
+export const LinkField = forwardRef(function LinkField({ onFile, onYouTube }, ref) {
   const [value, setValue] = useState("");
   const [problem, setProblem] = useState(null);
   const [job, setJob] = useState(null);
@@ -20,6 +21,21 @@ export const LinkField = forwardRef(function LinkField({ onFile }, ref) {
     if (!url) return setProblem({ title: "That doesn't look like a link", body: "Paste the full address, starting with https://" });
 
     const platform = platformOf(url);
+    if (platform === "YouTube") {
+      const controller = new AbortController();
+      abort.current = controller;
+      setJob({ progress: 0, detail: "Getting the transcript from YouTube…" });
+      try {
+        onYouTube(url.href, await loadYouTube(url.href, { signal: controller.signal }));
+        setValue("");
+      } catch (error) {
+        if (error?.name !== "AbortError") setProblem({ title: "Couldn't get the transcript", body: error.message });
+      } finally {
+        abort.current = null;
+        setJob(null);
+      }
+      return;
+    }
     if (platform) {
       return setProblem({
         title: `${platform} links can't be opened here`,
@@ -67,7 +83,13 @@ export const LinkField = forwardRef(function LinkField({ onFile }, ref) {
               setValue(event.target.value);
               setProblem(null);
             }}
-            placeholder="…or paste a link to a video file"
+            onPaste={(event) => {
+              const text = event.clipboardData.getData("text/plain").trim();
+              if (!text) return;
+              event.preventDefault();
+              open(text);
+            }}
+            placeholder="…or paste a YouTube link to get its transcript"
             className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-4"
           />
           <button

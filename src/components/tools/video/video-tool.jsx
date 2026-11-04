@@ -12,6 +12,7 @@ import { ToolHeader } from "../tool-header";
 import { FramesPanel } from "./frames-panel";
 import { LinkField } from "./link-field";
 import { ScreenTextPanel, TranscriptPanel } from "./text-panels";
+import { YouTubePanel } from "./youtube-panel";
 
 const TABS = [
   { value: "frames", label: "Images", icon: Images },
@@ -30,6 +31,7 @@ export function VideoTool() {
   const [src, setSrc] = useState(null);
   const [info, setInfo] = useState(null);
   const [tab, setTab] = useState("frames");
+  const [youtube, setYoutube] = useState(null);
   const player = useRef(null);
   const linkField = useRef(null);
 
@@ -38,13 +40,14 @@ export function VideoTool() {
     if (!picked) return toast.error("Choose a video file");
     if (src) URL.revokeObjectURL(src);
     setInfo(null);
+    setYoutube(null);
     setFile(picked);
     setSrc(URL.createObjectURL(picked));
   };
 
   // Ctrl/Cmd+V anywhere on the page (outside a text box) takes a copied video file or link.
   useEffect(() => {
-    if (file) return;
+    if (file || youtube) return;
     const onPaste = (event) => {
       if (event.target.closest?.("input, textarea, [contenteditable]")) return;
       const files = event.clipboardData?.files;
@@ -78,7 +81,9 @@ export function VideoTool() {
         description="Pull still images out of a video, transcribe what's said, or read the text shown on screen."
       />
 
-      {!file ? (
+      {youtube ? (
+        <YouTubePanel key={youtube.url} url={youtube.url} initial={youtube.data} onClose={() => setYoutube(null)} />
+      ) : !file ? (
         <>
           <div className="mt-5 flex flex-col gap-2">
             <DropZone
@@ -89,7 +94,7 @@ export function VideoTool() {
               hint="or drop or paste it here"
               note="MP4, MOV, WebM · stays on your device"
             />
-            <LinkField ref={linkField} onFile={(picked) => choose([picked])} />
+            <LinkField ref={linkField} onFile={(picked) => choose([picked])} onYouTube={(url, data) => setYoutube({ url, data })} />
           </div>
           <ul className="mt-5 grid gap-2 sm:grid-cols-3">
             {FEATURES.map(([title, body]) => (
