@@ -7,6 +7,13 @@ export const TOOLS = [
     tags: ["Edit text", "Sign", "Pages"],
   },
   {
+    slug: "video-to-images",
+    title: "Video to images & text",
+    summary: "Extract frames as JPG/PNG/WEBP, transcribe what's said into text or subtitles, and read on-screen text.",
+    icon: "video",
+    tags: ["Frames", "Transcript", "OCR"],
+  },
+  {
     slug: "metadata-cleaner",
     title: "Metadata cleaner",
     summary: "Strip GPS, camera, author and date info from photos, PDFs, Office docs, audio and video — one file or hundreds.",
