@@ -4,7 +4,7 @@ import { CloudUpload, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-export function DropZone({ onFiles, accept, title = "Choose files", hint, note, compact = false, className }) {
+export function DropZone({ onFiles, onText, accept, title = "Choose files", hint, note, compact = false, className }) {
   const input = useRef(null);
   const [over, setOver] = useState(false);
 
@@ -23,7 +23,10 @@ export function DropZone({ onFiles, accept, title = "Choose files", hint, note, 
     onDrop: (event) => {
       event.preventDefault();
       setOver(false);
-      take(event.dataTransfer.files);
+      if (event.dataTransfer.files?.length) return take(event.dataTransfer.files);
+      // A link dragged in from another tab arrives as text, not a file.
+      const text = event.dataTransfer.getData("text/uri-list") || event.dataTransfer.getData("text/plain");
+      if (text && onText) onText(text.trim());
     },
   };
 

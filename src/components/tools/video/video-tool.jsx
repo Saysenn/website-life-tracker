@@ -1,7 +1,7 @@
 "use client";
 
 import { Captions, Images, RefreshCw, ScanText } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Page } from "@/components/ui/page";
 import { formatBytes } from "@/lib/tools/files";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { DropZone } from "../drop-zone";
 import { ToolHeader } from "../tool-header";
 import { FramesPanel } from "./frames-panel";
+import { LinkField } from "./link-field";
 import { ScreenTextPanel, TranscriptPanel } from "./text-panels";
 
 const TABS = [
@@ -30,6 +31,7 @@ export function VideoTool() {
   const [info, setInfo] = useState(null);
   const [tab, setTab] = useState("frames");
   const player = useRef(null);
+  const linkField = useRef(null);
 
   const choose = (files) => {
     const picked = [...files].find((item) => item.type.startsWith("video/") || /\.(mp4|m4v|mov|webm|mkv|avi|ogv)$/i.test(item.name));
@@ -39,6 +41,26 @@ export function VideoTool() {
     setFile(picked);
     setSrc(URL.createObjectURL(picked));
   };
+
+  // Ctrl/Cmd+V anywhere on the page (outside a text box) takes a copied video file or link.
+  useEffect(() => {
+    if (file) return;
+    const onPaste = (event) => {
+      if (event.target.closest?.("input, textarea, [contenteditable]")) return;
+      const files = event.clipboardData?.files;
+      if (files?.length) {
+        event.preventDefault();
+        return choose(files);
+      }
+      const text = event.clipboardData?.getData("text/plain")?.trim();
+      if (text) {
+        event.preventDefault();
+        linkField.current?.open(text);
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  });
 
   const seekTo = (time) => {
     const video = player.current;
@@ -58,8 +80,16 @@ export function VideoTool() {
 
       {!file ? (
         <>
-          <div className="mt-5">
-            <DropZone onFiles={choose} accept="video/*,.mkv,.mov" title="Choose a video" hint="or drop it here" note="MP4, MOV, WebM · stays on your device" />
+          <div className="mt-5 flex flex-col gap-2">
+            <DropZone
+              onFiles={choose}
+              onText={(text) => linkField.current?.open(text)}
+              accept="video/*,.mkv,.mov"
+              title="Choose a video"
+              hint="or drop or paste it here"
+              note="MP4, MOV, WebM · stays on your device"
+            />
+            <LinkField ref={linkField} onFile={(picked) => choose([picked])} />
           </div>
           <ul className="mt-5 grid gap-2 sm:grid-cols-3">
             {FEATURES.map(([title, body]) => (
