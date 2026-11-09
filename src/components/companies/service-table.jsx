@@ -148,12 +148,9 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
       </td>
       {service.key === "rdp" && (
         <td className={cn(cell, "hidden @min-[96rem]:table-cell")}>
-          <div className="flex items-center gap-1">
-            <span className={cn("min-w-0 flex-1 truncate", company.digirdpEmail ? "text-ink-2" : "text-ink-4")}>
-              {company.digirdpEmail || "Not set"}
-            </span>
-            {company.hasProviderPassword && <CopyPassword companyId={company.id} kind="provider" />}
-          </div>
+          <p className={cn("truncate", company.digirdpEmail ? "text-ink-2" : "text-ink-4")}>
+            {company.digirdpEmail || "Not set"}
+          </p>
         </td>
       )}
       {service.billable && (
@@ -181,7 +178,7 @@ function ServiceRow({ row, service, pricing, selected, onSelect, onRenewToday, o
       <td className={cell}>
         <div className="flex items-center justify-end gap-0.5">
           {service.key === "rdp" && company.hasProviderPassword && (
-            <CopyPassword companyId={company.id} kind="provider" className="@min-[96rem]:hidden" />
+            <CopyPassword companyId={company.id} kind="provider" />
           )}
           {service.key === "rdp" && company.hasPassword && <CopyPassword companyId={company.id} />}
           <RowAction label={`${service.label} renewed today`} onClick={() => onRenewToday(company, service)}>
