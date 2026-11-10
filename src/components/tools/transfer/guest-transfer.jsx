@@ -12,6 +12,7 @@ import { DropZone } from "../drop-zone";
 import { chime } from "./alerts";
 import { call } from "./api";
 import { countdown, timeAgo, useNow } from "./format";
+import { DownloadAll, readyCount } from "./download-all";
 import { FileGlyph, Thread } from "./thread";
 
 function Promises({ className }) {
@@ -136,7 +137,7 @@ function Start({ linkKey, onStarted }) {
   );
 }
 
-function GuestHeader({ chat, peer }) {
+function GuestHeader({ chat, peer, files }) {
   const now = useNow();
   const status = peer?.typing ? "Typing…" : peer?.online ? "Online now" : peer?.seenAt ? `Seen ${timeAgo(peer.seenAt, now)}` : "Away";
   return (
@@ -163,6 +164,7 @@ function GuestHeader({ chat, peer }) {
           Deletes in {countdown(chat.expiresAt - now)}
         </span>
       )}
+      <DownloadAll href="/api/transfer/files/zip" count={readyCount(files)} />
     </div>
   );
 }

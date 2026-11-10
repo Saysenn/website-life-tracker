@@ -488,6 +488,20 @@ export async function listChats() {
   }));
 }
 
+/** Finished files for a zip, oldest first: one chat, or every chat when chatId is null. */
+export async function readyFiles(chatId) {
+  const now = Date.now();
+  const where = [eq(transferFiles.status, "ready"), gt(transferFiles.expiresAt, now)];
+  if (chatId) where.push(eq(transferFiles.chatId, chatId));
+  const rows = await db
+    .select({ file: transferFiles, chatName: transferChats.name })
+    .from(transferFiles)
+    .innerJoin(transferChats, eq(transferChats.id, transferFiles.chatId))
+    .where(and(...where))
+    .orderBy(transferFiles.createdAt);
+  return rows.map(({ file, chatName }) => ({ ...file, chatName }));
+}
+
 export async function listFiles() {
   const rows = await db
     .select({ file: transferFiles, chatName: transferChats.name })

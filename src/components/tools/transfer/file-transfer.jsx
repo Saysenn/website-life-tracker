@@ -16,7 +16,15 @@ import {
   Timer,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/dialog";
@@ -30,6 +38,7 @@ import { ToolHeader } from "../tool-header";
 import { chime, desktopAlert, previewOf } from "./alerts";
 import { call } from "./api";
 import { countdown, device, initials, timeAgo, useNow } from "./format";
+import { DownloadAll, readyCount } from "./download-all";
 import { FileGlyph, Thread } from "./thread";
 
 const LIST_FAST = 4000;
@@ -38,7 +47,12 @@ const noop = () => () => {};
 
 function Avatar({ name, online, className }) {
   return (
-    <span className={cn("relative flex size-9 shrink-0 items-center justify-center rounded-full bg-hover text-xs font-semibold text-ink-2", className)}>
+    <span
+      className={cn(
+        "relative flex size-9 shrink-0 items-center justify-center rounded-full bg-hover text-xs font-semibold text-ink-2",
+        className,
+      )}
+    >
       {initials(name)}
       {online !== undefined && (
         <span
@@ -63,10 +77,17 @@ function LinkCard({ linkKey, onRotate, stats }) {
   const [confirm, setConfirm] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [, rerender] = useReducer((count) => count + 1, 0);
-  const origin = useSyncExternalStore(noop, () => window.location.origin, () => "");
+  const origin = useSyncExternalStore(
+    noop,
+    () => window.location.origin,
+    () => "",
+  );
   const permission = useSyncExternalStore(
     noop,
-    () => (typeof Notification === "undefined" ? "unsupported" : Notification.permission),
+    () =>
+      typeof Notification === "undefined"
+        ? "unsupported"
+        : Notification.permission,
     () => "unsupported",
   );
 
@@ -77,7 +98,9 @@ function LinkCard({ linkKey, onRotate, stats }) {
     try {
       const { key } = await call("/api/transfer/admin/link");
       onRotate(key);
-      toast.success("New link ready", { description: "The old link no longer starts new chats." });
+      toast.success("New link ready", {
+        description: "The old link no longer starts new chats.",
+      });
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -91,7 +114,8 @@ function LinkCard({ linkKey, onRotate, stats }) {
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold">Your transfer link</h2>
           <p className="mt-0.5 text-xs text-ink-3">
-            Anyone with it can start a chat and send you files. Share it only with people you trust.
+            Anyone with it can start a chat and send you files. Share it only
+            with people you trust.
           </p>
         </div>
         {permission === "default" && (
@@ -110,7 +134,9 @@ function LinkCard({ linkKey, onRotate, stats }) {
         <div className="flex h-9 min-w-0 flex-1 basis-[28rem] items-center gap-2 rounded-lg bg-sunken px-3">
           <Lock className="size-[1.3rem] shrink-0 text-success" />
           {url ? (
-            <span className="truncate text-sm text-ink-2 tabular-nums select-all">{url}</span>
+            <span className="truncate text-sm text-ink-2 tabular-nums select-all">
+              {url}
+            </span>
           ) : (
             <Skeleton className="h-3 w-48" />
           )}
@@ -132,7 +158,13 @@ function LinkCard({ linkKey, onRotate, stats }) {
             </a>
           </Tooltip>
           <Tooltip label="Make a new link">
-            <Button variant="soft" size="icon" pending={rotating} onClick={() => setConfirm(true)} aria-label="Make a new link">
+            <Button
+              variant="soft"
+              size="icon"
+              pending={rotating}
+              onClick={() => setConfirm(true)}
+              aria-label="Make a new link"
+            >
               {!rotating && <RefreshCw />}
             </Button>
           </Tooltip>
@@ -149,7 +181,8 @@ function LinkCard({ linkKey, onRotate, stats }) {
           Chats and files delete 24 hours after they start
         </span>
         <span className="tabular-nums">
-          {plural(stats.chats, "chat")} · {plural(stats.files, "file")} · {formatBytes(stats.bytes)} stored
+          {plural(stats.chats, "chat")} · {plural(stats.files, "file")} ·{" "}
+          {formatBytes(stats.bytes)} stored
         </span>
       </div>
 
@@ -181,7 +214,10 @@ function ChatList({ chats, selected, onSelect }) {
       <div className="flex h-full flex-col items-center justify-center px-6 py-10 text-center">
         <MessageSquare className="size-[2.4rem] text-ink-4" strokeWidth={1.5} />
         <p className="mt-3 text-sm font-medium">No chats yet</p>
-        <p className="mt-0.5 text-xs text-ink-3">Send your link to someone. Their chat shows up here the moment they open it.</p>
+        <p className="mt-0.5 text-xs text-ink-3">
+          Send your link to someone. Their chat shows up here the moment they
+          open it.
+        </p>
       </div>
     );
   }
@@ -201,14 +237,38 @@ function ChatList({ chats, selected, onSelect }) {
             <Avatar name={chat.name} online={chat.online} />
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
-                <p className={cn("truncate text-sm", chat.unread ? "font-semibold" : "font-medium")}>{chat.name}</p>
-                <span className="ml-auto shrink-0 text-2xs text-ink-4 tabular-nums">{timeAgo(chat.activeAt)}</span>
+                <p
+                  className={cn(
+                    "truncate text-sm",
+                    chat.unread ? "font-semibold" : "font-medium",
+                  )}
+                >
+                  {chat.name}
+                </p>
+                <span className="ml-auto shrink-0 text-2xs text-ink-4 tabular-nums">
+                  {timeAgo(chat.activeAt)}
+                </span>
               </div>
               <div className="flex items-center gap-2">
-                <p className={cn("truncate text-xs", chat.typing ? "text-data" : chat.unread ? "text-ink-2" : "text-ink-3")}>
-                  {chat.typing ? "typing…" : chat.last ? previewOf(chat.last) : chat.ip}
+                <p
+                  className={cn(
+                    "truncate text-xs",
+                    chat.typing
+                      ? "text-data"
+                      : chat.unread
+                        ? "text-ink-2"
+                        : "text-ink-3",
+                  )}
+                >
+                  {chat.typing
+                    ? "typing…"
+                    : chat.last
+                      ? previewOf(chat.last)
+                      : chat.ip}
                 </p>
-                {chat.blocked && <Lock className="size-[1.1rem] shrink-0 text-ink-4" />}
+                {chat.blocked && (
+                  <Lock className="size-[1.1rem] shrink-0 text-ink-4" />
+                )}
                 {chat.unread > 0 && (
                   <span className="ml-auto flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-danger px-1 text-[0.9rem] font-semibold text-white tabular-nums">
                     {chat.unread > 9 ? "9+" : chat.unread}
@@ -230,22 +290,44 @@ function Detail({ icon: Icon, children, onClick, label }) {
       <span className="truncate">{children}</span>
     </>
   );
-  const className = "inline-flex max-w-full items-center gap-1 rounded-md bg-sunken px-1.5 py-0.5 text-2xs text-ink-2";
+  const className =
+    "inline-flex max-w-full items-center gap-1 rounded-md bg-sunken px-1.5 py-0.5 text-2xs text-ink-2";
   if (!onClick) return <span className={className}>{content}</span>;
   return (
     <Tooltip label={label}>
-      <button type="button" onClick={onClick} className={cn(className, "transition-colors hover:bg-hover hover:text-ink")}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          className,
+          "transition-colors hover:bg-hover hover:text-ink",
+        )}
+      >
         {content}
       </button>
     </Tooltip>
   );
 }
 
-function ChatHeader({ chat, peer, summary, onBack, onToggleBlock, onDelete }) {
+function ChatHeader({
+  chat,
+  peer,
+  files,
+  summary,
+  onBack,
+  onToggleBlock,
+  onDelete,
+}) {
   const now = useNow();
   const info = chat ?? summary;
   if (!info) return <div className="h-17 shrink-0" />;
-  const status = peer?.typing ? "Typing…" : peer?.online ? "Online now" : peer?.seenAt ? `Last seen ${timeAgo(peer.seenAt, now)}` : "Offline";
+  const status = peer?.typing
+    ? "Typing…"
+    : peer?.online
+      ? "Online now"
+      : peer?.seenAt
+        ? `Last seen ${timeAgo(peer.seenAt, now)}`
+        : "Offline";
 
   return (
     <div className="flex shrink-0 items-start gap-2.5 border-b border-grid px-3 py-3 sm:px-5">
@@ -259,27 +341,65 @@ function ChatHeader({ chat, peer, summary, onBack, onToggleBlock, onDelete }) {
       </button>
       <Avatar name={info.name} online={peer?.online} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-base font-semibold leading-tight">{info.name}</p>
-        <p className={cn("text-xs", peer?.typing || peer?.online ? "text-success" : "text-ink-3")}>{status}</p>
+        <p className="truncate text-base font-semibold leading-tight">
+          {info.name}
+        </p>
+        <p
+          className={cn(
+            "text-xs",
+            peer?.typing || peer?.online ? "text-success" : "text-ink-3",
+          )}
+        >
+          {status}
+        </p>
         <div className="mt-1.5 flex flex-wrap gap-1">
           {info.ip && (
-            <Detail icon={Globe} onClick={() => copy(info.ip, "IP address")} label="Copy IP address">
+            <Detail
+              icon={Globe}
+              onClick={() => copy(info.ip, "IP address")}
+              label="Copy IP address"
+            >
               {info.ip}
             </Detail>
           )}
           {info.location && <Detail icon={Globe}>{info.location}</Detail>}
-          {info.userAgent && <Detail icon={MonitorSmartphone}>{device(info.userAgent)}</Detail>}
-          <Detail icon={Timer}>Deletes in {countdown(info.expiresAt - now)}</Detail>
+          {info.userAgent && (
+            <Detail icon={MonitorSmartphone}>{device(info.userAgent)}</Detail>
+          )}
+          <Detail icon={Timer}>
+            Deletes in {countdown(info.expiresAt - now)}
+          </Detail>
         </div>
       </div>
-      <div className="flex shrink-0 gap-1">
+      <div className="flex shrink-0 items-center gap-1">
+        <DownloadAll
+          href={`/api/transfer/files/zip?chat=${info.id}`}
+          count={readyCount(files)}
+          compact
+          className="sm:hidden"
+        />
+        <DownloadAll
+          href={`/api/transfer/files/zip?chat=${info.id}`}
+          count={readyCount(files)}
+          className="hidden sm:inline-flex"
+        />
         <Tooltip label={info.blocked ? "Reopen chat" : "Close chat"}>
-          <Button variant="ghost" size="icon" onClick={onToggleBlock} aria-label={info.blocked ? "Reopen chat" : "Close chat"}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleBlock}
+            aria-label={info.blocked ? "Reopen chat" : "Close chat"}
+          >
             {info.blocked ? <LockOpen /> : <Lock />}
           </Button>
         </Tooltip>
         <Tooltip label="Delete chat and files">
-          <Button variant="ghost" size="icon" onClick={onDelete} aria-label="Delete chat">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onDelete}
+            aria-label="Delete chat"
+          >
             <Trash2 />
           </Button>
         </Tooltip>
@@ -295,48 +415,79 @@ function FilesList({ files, onOpenChat, onDelete }) {
     return (
       <div className="mt-4 rounded-2xl bg-surface px-6 py-14 text-center shadow-card">
         <p className="text-sm font-medium">No files in the last 24 hours</p>
-        <p className="mt-0.5 text-xs text-ink-3">Everything sent either way shows up here until it is deleted.</p>
+        <p className="mt-0.5 text-xs text-ink-3">
+          Everything sent either way shows up here until it is deleted.
+        </p>
       </div>
     );
   }
 
   return (
-    <ul className="mt-4 grid gap-2">
-      {files.map((file) => (
-        <li key={file.id} className="flex animate-rise items-center gap-3 rounded-2xl bg-surface p-3 shadow-card">
-          <FileGlyph file={file} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium" title={file.name}>
-              {file.name}
-            </p>
-            <p className="truncate text-xs text-ink-3 tabular-nums">
-              {formatBytes(file.size)} · {file.sender === "guest" ? `From ${file.chatName}` : `To ${file.chatName}`} ·{" "}
-              {timeAgo(file.createdAt, now)} · deletes in {countdown(file.expiresAt - now)}
-            </p>
-          </div>
-          <Tooltip label="Open chat">
-            <Button variant="ghost" size="icon" onClick={() => onOpenChat(file.chatId)} aria-label="Open chat">
-              <MessageSquare />
-            </Button>
-          </Tooltip>
-          <Tooltip label="Delete file">
-            <Button variant="ghost" size="icon" onClick={() => onDelete(file)} aria-label="Delete file">
-              <Trash2 />
-            </Button>
-          </Tooltip>
-          <Tooltip label="Download">
-            <a
-              href={`/api/transfer/files/${file.id}`}
-              download={file.name}
-              aria-label={`Download ${file.name}`}
-              className="flex size-8.5 shrink-0 items-center justify-center rounded-lg bg-ink text-ground transition-colors hover:bg-ink/85"
-            >
-              <Download className="size-[1.5rem]" />
-            </a>
-          </Tooltip>
-        </li>
-      ))}
-    </ul>
+    <>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <p className="text-xs text-ink-3 tabular-nums">
+          {plural(files.length, "file")} ·{" "}
+          {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
+        </p>
+        <DownloadAll
+          href="/api/transfer/files/zip?all=1"
+          count={files.length}
+        />
+      </div>
+      <ul className="mt-2 grid gap-2">
+        {files.map((file) => (
+          <li
+            key={file.id}
+            className="flex animate-rise items-center gap-3 rounded-2xl bg-surface p-3 shadow-card"
+          >
+            <FileGlyph file={file} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium" title={file.name}>
+                {file.name}
+              </p>
+              <p className="truncate text-xs text-ink-3 tabular-nums">
+                {formatBytes(file.size)} ·{" "}
+                {file.sender === "guest"
+                  ? `From ${file.chatName}`
+                  : `To ${file.chatName}`}{" "}
+                · {timeAgo(file.createdAt, now)} · deletes in{" "}
+                {countdown(file.expiresAt - now)}
+              </p>
+            </div>
+            <Tooltip label="Open chat">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onOpenChat(file.chatId)}
+                aria-label="Open chat"
+              >
+                <MessageSquare />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Delete file">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onDelete(file)}
+                aria-label="Delete file"
+              >
+                <Trash2 />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Download">
+              <a
+                href={`/api/transfer/files/${file.id}`}
+                download={file.name}
+                aria-label={`Download ${file.name}`}
+                className="flex size-8.5 shrink-0 items-center justify-center rounded-lg bg-ink text-ground transition-colors hover:bg-ink/85"
+              >
+                <Download className="size-[1.5rem]" />
+              </a>
+            </Tooltip>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -358,7 +509,9 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
   const load = useCallback(async () => {
     clearTimeout(timer.current);
     try {
-      const next = await call("/api/transfer/admin/chats?files=1", { method: "GET" });
+      const next = await call("/api/transfer/admin/chats?files=1", {
+        method: "GET",
+      });
       const previous = seen.current;
       if (previous) {
         next.chats.forEach((chat) => {
@@ -370,14 +523,18 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
               description: [chat.ip, chat.location].filter(Boolean).join(" · "),
               action: { label: "Open", onClick: () => setSelected(chat.id) },
             });
-            desktopAlert(`${chat.name} opened your link`, chat.ip ?? "", () => setSelected(chat.id));
+            desktopAlert(`${chat.name} opened your link`, chat.ip ?? "", () =>
+              setSelected(chat.id),
+            );
           } else if (chat.unread > before && !watching) {
             chime();
             toast(chat.name, {
               description: previewOf(chat.last),
               action: { label: "Open", onClick: () => setSelected(chat.id) },
             });
-            desktopAlert(chat.name, previewOf(chat.last), () => setSelected(chat.id));
+            desktopAlert(chat.name, previewOf(chat.last), () =>
+              setSelected(chat.id),
+            );
           }
         });
       }
@@ -386,7 +543,10 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
     } catch (error) {
       if (error.status === 401) return toast.error(error.message);
     }
-    timer.current = setTimeout(() => tick.current?.(), document.hidden ? LIST_SLOW : LIST_FAST);
+    timer.current = setTimeout(
+      () => tick.current?.(),
+      document.hidden ? LIST_SLOW : LIST_FAST,
+    );
   }, []);
 
   useEffect(() => {
@@ -403,9 +563,15 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
     };
   }, [load]);
 
-  const unread = data.chats?.reduce((total, chat) => total + (chat.id === selected ? 0 : chat.unread), 0) ?? 0;
+  const unread =
+    data.chats?.reduce(
+      (total, chat) => total + (chat.id === selected ? 0 : chat.unread),
+      0,
+    ) ?? 0;
   useEffect(() => {
-    document.title = unread ? `(${unread}) File transfer · Life Tracker` : "File transfer · Life Tracker";
+    document.title = unread
+      ? `(${unread}) File transfer · Life Tracker`
+      : "File transfer · Life Tracker";
   }, [unread]);
 
   const stats = useMemo(
@@ -429,9 +595,14 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
 
   const toggleBlock = async (chat) => {
     try {
-      await call(`/api/transfer/admin/chats/${chat.id}`, { method: "PATCH", body: { blocked: !chat.blocked } });
+      await call(`/api/transfer/admin/chats/${chat.id}`, {
+        method: "PATCH",
+        body: { blocked: !chat.blocked },
+      });
       toast.success(chat.blocked ? "Chat reopened" : "Chat closed", {
-        description: chat.blocked ? undefined : `${chat.name} can no longer send anything.`,
+        description: chat.blocked
+          ? undefined
+          : `${chat.name} can no longer send anything.`,
       });
       load();
     } catch (error) {
@@ -444,11 +615,15 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
     setConfirm(null);
     try {
       if (target.kind === "chat") {
-        await call(`/api/transfer/admin/chats/${target.item.id}`, { method: "DELETE" });
+        await call(`/api/transfer/admin/chats/${target.item.id}`, {
+          method: "DELETE",
+        });
         if (selected === target.item.id) setSelected(null);
         toast.success("Chat deleted");
       } else {
-        await call(`/api/transfer/files/${target.item.id}`, { method: "DELETE" });
+        await call(`/api/transfer/files/${target.item.id}`, {
+          method: "DELETE",
+        });
         toast.success("File deleted");
       }
       load();
@@ -482,13 +657,31 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
       </div>
 
       {tab === "files" ? (
-        <FilesList files={data.files} onOpenChat={select} onDelete={(file) => setConfirm({ kind: "file", item: file })} />
+        <FilesList
+          files={data.files}
+          onOpenChat={select}
+          onDelete={(file) => setConfirm({ kind: "file", item: file })}
+        />
       ) : (
         <div className="mt-4 grid h-[calc(100dvh-14rem)] min-h-[52rem] overflow-hidden rounded-2xl bg-surface shadow-card lg:h-[calc(100dvh-30rem)] lg:grid-cols-[30rem_1fr]">
-          <div className={cn("min-h-0 overflow-y-auto border-grid lg:block lg:border-r", selected && "hidden")}>
-            <ChatList chats={data.chats} selected={selected} onSelect={select} />
+          <div
+            className={cn(
+              "min-h-0 overflow-y-auto border-grid lg:block lg:border-r",
+              selected && "hidden",
+            )}
+          >
+            <ChatList
+              chats={data.chats}
+              selected={selected}
+              onSelect={select}
+            />
           </div>
-          <div className={cn("min-h-0 bg-ground/40", !selected && "hidden lg:block")}>
+          <div
+            className={cn(
+              "min-h-0 bg-ground/40",
+              !selected && "hidden lg:block",
+            )}
+          >
             {selected ? (
               <Thread
                 key={selected}
@@ -500,30 +693,44 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
                 onPeerMessages={(messages) => {
                   if (!document.hidden) return;
                   chime();
-                  desktopAlert(summary?.name ?? "New message", previewOf(messages.at(-1)));
+                  desktopAlert(
+                    summary?.name ?? "New message",
+                    previewOf(messages.at(-1)),
+                  );
                 }}
-                renderHeader={({ chat, peer }) => (
+                renderHeader={({ chat, peer, files }) => (
                   <ChatHeader
                     chat={chat}
                     peer={peer}
+                    files={files}
                     summary={summary}
                     onBack={() => setSelected(null)}
                     onToggleBlock={() => toggleBlock(chat ?? summary)}
-                    onDelete={() => setConfirm({ kind: "chat", item: chat ?? summary })}
+                    onDelete={() =>
+                      setConfirm({ kind: "chat", item: chat ?? summary })
+                    }
                   />
                 )}
                 renderEnded={() => (
                   <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                     <p className="text-sm font-medium">This chat is gone</p>
-                    <p className="mt-0.5 text-xs text-ink-3">It was deleted or passed its 24 hours.</p>
-                    <Button variant="soft" size="sm" className="mt-3" onClick={() => setSelected(null)}>
+                    <p className="mt-0.5 text-xs text-ink-3">
+                      It was deleted or passed its 24 hours.
+                    </p>
+                    <Button
+                      variant="soft"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => setSelected(null)}
+                    >
                       Back to chats
                     </Button>
                   </div>
                 )}
                 empty={
                   <p className="m-auto max-w-[32rem] text-center text-xs text-ink-3">
-                    Say hello, or drop files here to send them. Everything in this chat is deleted 24 hours after it started.
+                    Say hello, or drop files here to send them. Everything in
+                    this chat is deleted 24 hours after it started.
                   </p>
                 }
               />
@@ -533,7 +740,9 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
                   <MessageSquare className="size-[2rem]" strokeWidth={1.5} />
                 </span>
                 <p className="mt-3 text-sm font-medium">Pick a chat</p>
-                <p className="mt-0.5 text-xs text-ink-3">See who is sending files, where from, and reply in real time.</p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  See who is sending files, where from, and reply in real time.
+                </p>
               </div>
             )}
           </div>
@@ -543,7 +752,11 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
       <ConfirmDialog
         open={Boolean(confirm)}
         onOpenChange={(open) => !open && setConfirm(null)}
-        title={confirm?.kind === "chat" ? `Delete the chat with ${confirm.item.name}?` : `Delete ${confirm?.item.name}?`}
+        title={
+          confirm?.kind === "chat"
+            ? `Delete the chat with ${confirm.item.name}?`
+            : `Delete ${confirm?.item.name}?`
+        }
         description={
           confirm?.kind === "chat"
             ? "Every message and file in it is removed for both of you. This cannot be undone."

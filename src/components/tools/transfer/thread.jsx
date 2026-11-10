@@ -388,7 +388,7 @@ export function Thread({
         sendFiles(event.dataTransfer.files);
       }}
     >
-      {renderHeader?.({ chat: chat.chat, peer: chat.peer })}
+      {renderHeader?.({ chat: chat.chat, peer: chat.peer, files: chat.files })}
 
       <div
         ref={scroller}
