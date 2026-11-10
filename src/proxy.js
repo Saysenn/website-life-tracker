@@ -4,6 +4,7 @@ import { authConfig } from "./auth.config";
 
 const { auth } = NextAuth(authConfig);
 
+const FILES_HOME = "/tools/file-transfer";
 const DEVICE_COOKIE = "lt_device";
 const DEVICE_MAX_AGE = 400 * 24 * 60 * 60;
 
@@ -54,6 +55,10 @@ const guarded = auth(async (request) => {
   if (SELF_GUARDED.some((pattern) => pattern.test(pathname))) return NextResponse.next();
 
   const onLogin = pathname === "/login";
+  if (request.auth?.user?.role === "files") {
+    const allowed = pathname === FILES_HOME || pathname.startsWith("/api/");
+    return allowed ? NextResponse.next() : NextResponse.redirect(new URL(FILES_HOME, request.nextUrl));
+  }
   if (request.auth) return onLogin ? NextResponse.redirect(new URL("/", request.nextUrl)) : NextResponse.next();
   if (onLogin) return NextResponse.next();
 

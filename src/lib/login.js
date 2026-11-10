@@ -9,14 +9,22 @@ const MAX_FAILURES = 5;
 
 const digest = (value) => createHash("sha256").update(String(value)).digest();
 
-export function verifyAdmin(username, password) {
-  const expectedUser = process.env.ADMIN_USERNAME;
-  const expectedPassword = process.env.ADMIN_PASSWORD;
+function matches(username, password, expectedUser, expectedPassword) {
   if (!expectedUser || !expectedPassword) return false;
   if (typeof username !== "string" || typeof password !== "string") return false;
   const userOk = timingSafeEqual(digest(username.trim()), digest(expectedUser));
   const passwordOk = timingSafeEqual(digest(password), digest(expectedPassword));
   return userOk && passwordOk;
+}
+
+export const FILES_ROLE = "files";
+export const FILES_HOME = "/tools/file-transfer";
+
+/** "admin" for the full app, "files" for the file transfer only account, or null. */
+export function verifyLogin(username, password) {
+  if (matches(username, password, process.env.ADMIN_USERNAME, process.env.ADMIN_PASSWORD)) return "admin";
+  if (matches(username, password, process.env.FILES_USERNAME, process.env.FILES_PASSWORD)) return FILES_ROLE;
+  return null;
 }
 
 export function clientIp(headers) {

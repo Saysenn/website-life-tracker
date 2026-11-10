@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { signIn, signOut } from "@/auth";
-import { clearFailures, clientIp, isBlocked, recordFailure, verifyAdmin } from "@/lib/login";
+import { FILES_HOME, FILES_ROLE, clearFailures, clientIp, isBlocked, recordFailure, verifyLogin } from "@/lib/login";
 
 function safeRedirect(value) {
   const path = typeof value === "string" ? value : "";
@@ -15,13 +15,15 @@ export async function login(_state, formData) {
   const ip = clientIp(await headers());
 
   if (await isBlocked(ip)) return { error: "Too many attempts. Try again in 15 minutes.", username };
-  if (!verifyAdmin(username, password)) {
+  const role = verifyLogin(username, password);
+  if (!role) {
     await recordFailure(ip);
     return { error: "Username or password is incorrect.", username };
   }
 
   await clearFailures(ip);
-  await signIn("credentials", { username, password, redirectTo: safeRedirect(formData.get("next")) });
+  const redirectTo = role === FILES_ROLE ? FILES_HOME : safeRedirect(formData.get("next"));
+  await signIn("credentials", { username, password, redirectTo });
 }
 
 export async function logout() {

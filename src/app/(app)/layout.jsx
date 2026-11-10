@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/shell/app-shell";
+import { FilesShell } from "@/components/shell/files-shell";
 import { getCompanies, getGroups, getPricing, getStatusRules, getToday } from "@/lib/data";
 import { buildGroupPanels } from "@/lib/group-panel";
 import { isArchived, needsAttention, serviceStates } from "@/lib/services";
@@ -7,7 +8,8 @@ import { requireSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }) {
-  await requireSession();
+  const session = await requireSession();
+  if (session.user.role === "files") return <FilesShell>{children}</FilesShell>;
   const [companies, groups, rules, pricing] = await Promise.all([
     getCompanies(),
     getGroups(),

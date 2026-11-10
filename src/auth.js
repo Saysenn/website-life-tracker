@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "./auth.config";
-import { clientIp, isBlocked, recordFailure, verifyAdmin } from "./lib/login";
+import { clientIp, isBlocked, recordFailure, verifyLogin } from "./lib/login";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -11,7 +11,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials, request) {
         const ip = clientIp(request.headers);
         if (await isBlocked(ip)) return null;
-        if (verifyAdmin(credentials?.username, credentials?.password)) return { id: "admin", name: "Admin" };
+        const role = verifyLogin(credentials?.username, credentials?.password);
+        if (role === "admin") return { id: "admin", name: "Admin", role };
+        if (role) return { id: role, name: "File transfer", role };
         await recordFailure(ip);
         return null;
       },

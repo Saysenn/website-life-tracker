@@ -2,14 +2,16 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { ToolIcon } from "./tool-icon";
 
-export function ToolHeader({ icon, title, description, badge = "Runs on this device — files are never uploaded" }) {
+export function ToolHeader({ icon, title, description, badge = "Runs on this device — files are never uploaded", back = true }) {
   return (
     <>
-      <Link href="/tools" className="inline-flex items-center gap-1.5 text-sm text-ink-3 transition-colors hover:text-ink">
-        <ArrowLeft className="size-[1.4rem]" />
-        Tools
-      </Link>
-      <div className="mt-4 flex items-start gap-3.5">
+      {back && (
+        <Link href="/tools" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-3 transition-colors hover:text-ink">
+          <ArrowLeft className="size-[1.4rem]" />
+          Tools
+        </Link>
+      )}
+      <div className="flex items-start gap-3.5">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-data-soft text-data">
           <ToolIcon name={icon} className="size-[2rem]" />
         </span>

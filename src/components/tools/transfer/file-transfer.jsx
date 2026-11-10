@@ -340,7 +340,7 @@ function FilesList({ files, onOpenChat, onDelete }) {
   );
 }
 
-export function FileTransfer({ linkKey, initialChat }) {
+export function FileTransfer({ linkKey, initialChat, full = true }) {
   const [key, setKey] = useState(linkKey);
   const [tab, setTab] = useState("chats");
   const [selected, setSelected] = useState(initialChat || null);
@@ -464,6 +464,7 @@ export function FileTransfer({ linkKey, initialChat }) {
         title="File transfer"
         description="Swap files of any type with anyone you send your link to, and chat with them live."
         badge="Encrypted · deleted automatically after 24 hours"
+        back={full}
       />
 
       <LinkCard linkKey={key} onRotate={setKey} stats={stats} />

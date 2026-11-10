@@ -155,6 +155,10 @@ Set `DEVICE_KEY` on Vercel (`openssl rand -hex 24`) and redeploy. From then on e
 
 To unlock a device, open `https://your-app.vercel.app/unlock/<DEVICE_KEY>` in it once. It stays unlocked for 400 days, or until its cookies are cleared, then open the same link again. To lock every device out, change `DEVICE_KEY` and redeploy, then unlock the ones you still use.
 
+## File transfer only login
+
+Set `FILES_USERNAME` and `FILES_PASSWORD` on Vercel and redeploy. Signing in with them opens File transfer and nothing else: no sidebar, no companies, no settings, and every other page or action is refused. With the device lock on, that device also needs the unlock link once.
+
 ## Connect an AI assistant
 
 The file transfer tool has an MCP server, so an assistant such as Grok can use it the same way it uses Figma.
