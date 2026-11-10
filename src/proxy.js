@@ -58,10 +58,13 @@ const guarded = auth(async (request) => {
     const allowed = pathname === FILES_HOME || pathname.startsWith("/api/transfer/");
     return allowed ? NextResponse.next() : NextResponse.redirect(new URL(FILES_HOME, request.nextUrl));
   }
-  if (pathname === FILES_LOGIN) return role ? NextResponse.redirect(new URL("/", request.nextUrl)) : NextResponse.next();
+  const unlocked = !expected || request.cookies.get(DEVICE_COOKIE)?.value === expected;
+  if (pathname === FILES_LOGIN) {
+    return role && unlocked ? NextResponse.redirect(new URL("/", request.nextUrl)) : NextResponse.next();
+  }
 
   // Everything else, the admin login included, only answers on an unlocked device.
-  if (expected && request.cookies.get(DEVICE_COOKIE)?.value !== expected) return notFound();
+  if (!unlocked) return notFound();
 
   if (SELF_GUARDED.some((pattern) => pattern.test(pathname))) return NextResponse.next();
 
