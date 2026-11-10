@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
-import { HOST_NAME, MAX_FILE_BYTES, MAX_NAME } from "@/lib/transfer/constants";
+import { HOST_NAME, MAX_FILE_BYTES, MAX_NAME, RETENTION_DAYS } from "@/lib/transfer/constants";
 import { formatBytes } from "@/lib/tools/files";
 import { cn, plural } from "@/lib/utils";
 import { DropZone } from "../drop-zone";
@@ -15,17 +15,19 @@ import { countdown, timeAgo, useNow } from "./format";
 import { DownloadAll, readyCount } from "./download-all";
 import { FileGlyph, Thread } from "./thread";
 
-function Promises({ className }) {
+function Promises({ className, autoDelete = true }) {
   return (
     <div className={cn("flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-3", className)}>
       <span className="inline-flex items-center gap-1.5">
         <ShieldCheck className="size-[1.3rem] text-success" />
         Encrypted in storage
       </span>
-      <span className="inline-flex items-center gap-1.5">
-        <Timer className="size-[1.3rem]" />
-        Deleted after 24 hours
-      </span>
+      {autoDelete && (
+        <span className="inline-flex items-center gap-1.5">
+          <Timer className="size-[1.3rem]" />
+          Deleted after {RETENTION_DAYS} days
+        </span>
+      )}
       <span className="inline-flex items-center gap-1.5">
         <Lock className="size-[1.3rem]" />
         Private to this chat
@@ -34,7 +36,7 @@ function Promises({ className }) {
   );
 }
 
-function Start({ linkKey, onStarted }) {
+function Start({ linkKey, autoDelete, onStarted }) {
   const [name, setName] = useState("");
   const [files, setFiles] = useState([]);
   const [pending, setPending] = useState(false);
@@ -131,7 +133,7 @@ function Start({ linkKey, onStarted }) {
           </Button>
         </form>
 
-        <Promises className="mt-5" />
+        <Promises className="mt-5" autoDelete={autoDelete} />
       </div>
     </main>
   );
@@ -158,7 +160,7 @@ function GuestHeader({ chat, peer, files }) {
           {!peer?.online && " · they get notified"}
         </p>
       </div>
-      {chat && (
+      {chat?.expiresAt && (
         <span className="hidden items-center gap-1 rounded-md bg-sunken px-2 py-1 text-2xs text-ink-2 sm:inline-flex">
           <Timer className="size-[1.2rem]" />
           Deletes in {countdown(chat.expiresAt - now)}
@@ -182,7 +184,7 @@ function useUnreadTitle() {
   return setUnread;
 }
 
-export function GuestTransfer({ linkKey, started: startedBefore }) {
+export function GuestTransfer({ linkKey, autoDelete = true, started: startedBefore }) {
   const [started, setStarted] = useState(startedBefore);
   const [initialFiles, setInitialFiles] = useState(null);
   const setUnread = useUnreadTitle();
@@ -191,6 +193,7 @@ export function GuestTransfer({ linkKey, started: startedBefore }) {
     return (
       <Start
         linkKey={linkKey}
+        autoDelete={autoDelete}
         onStarted={(files) => {
           setInitialFiles(files);
           setStarted(true);
@@ -236,7 +239,7 @@ export function GuestTransfer({ linkKey, started: startedBefore }) {
             }
           />
         </div>
-        <Promises className="hidden py-3 sm:flex" />
+        <Promises className="hidden py-3 sm:flex" autoDelete={autoDelete} />
       </div>
     </main>
   );

@@ -14,13 +14,14 @@ import {
   TYPING_MS,
 } from "./constants";
 import { hashToken, randomId, sameText, seal, sealText, unseal, unsealText } from "./crypto";
+import { autoDeleteOn, expiryOf, rememberAutoDelete } from "./settings";
 
 const STARTS_PER_HOUR = 5;
 const MESSAGES_PER_MINUTE = 30;
 const OPEN_UPLOADS = 10;
 
 const peerOf = (role) => (role === "admin" ? "guest" : "admin");
-const expiresOf = (chat) => chat.createdAt + RETENTION_MS;
+const expiresOf = (chat, on) => expiryOf(chat.createdAt, on);
 
 export function cleanText(value, max) {
   return String(value ?? "")
@@ -63,7 +64,18 @@ export async function linkMatches(key) {
   return typeof key === "string" && key.length > 0 && sameText(await getLinkKey(), key);
 }
 
-/* Cleanup: a chat and everything in it is deleted 24 hours after it started. */
+/* Settings */
+
+export { autoDeleteOn };
+
+export async function setAutoDelete(on) {
+  await getLinkKey();
+  await db.update(transferLink).set({ autoDelete: Boolean(on) }).where(eq(transferLink.id, 1));
+  rememberAutoDelete(Boolean(on));
+  if (on) await purgeExpired({ force: true });
+}
+
+/* Cleanup: with auto-delete on, a chat and everything in it is deleted 7 days after it started. */
 
 let lastPurge = 0;
 
@@ -72,11 +84,13 @@ export async function purgeExpired({ force = false } = {}) {
   if (!force && now - lastPurge < 60_000) return;
   lastPurge = now;
 
-  const expired = await db
-    .select({ id: transferChats.id })
-    .from(transferChats)
-    .where(lt(transferChats.createdAt, now - RETENTION_MS));
-  if (expired.length) await deleteChats(expired.map((chat) => chat.id));
+  if (await autoDeleteOn()) {
+    const expired = await db
+      .select({ id: transferChats.id })
+      .from(transferChats)
+      .where(lt(transferChats.createdAt, now - RETENTION_MS));
+    if (expired.length) await deleteChats(expired.map((chat) => chat.id));
+  }
 
   const stale = await db
     .select({ id: transferFiles.id })
@@ -106,7 +120,8 @@ export async function deleteChat(id) {
 
 export async function getChat(id) {
   const chat = await db.query.transferChats.findFirst({ where: eq(transferChats.id, String(id)) });
-  if (!chat || expiresOf(chat) < Date.now()) throw new HttpError(404, "This chat no longer exists.");
+  const expires = chat && expiresOf(chat, await autoDeleteOn());
+  if (!chat || (expires && expires < Date.now())) throw new HttpError(404, "This chat no longer exists.");
   return chat;
 }
 
@@ -144,8 +159,9 @@ const AGENT_CHAT_NAME = "Grok";
 /** The chat where the assistant's own files and notes land. Made again after each cleanup. */
 export async function agentChat() {
   const now = Date.now();
+  const fresh = (await autoDeleteOn()) ? gt(transferChats.createdAt, now - RETENTION_MS) : undefined;
   const existing = await db.query.transferChats.findFirst({
-    where: and(eq(transferChats.ip, "agent"), gt(transferChats.createdAt, now - RETENTION_MS)),
+    where: and(eq(transferChats.ip, "agent"), fresh),
     orderBy: desc(transferChats.createdAt),
   });
   if (existing) return { chat: existing, created: false };
@@ -171,13 +187,13 @@ export async function setBlocked(id, blocked) {
   await db.update(transferChats).set({ blocked: Boolean(blocked) }).where(eq(transferChats.id, id));
 }
 
-function chatView(chat, role) {
+function chatView(chat, role, on) {
   const base = {
     id: chat.id,
     name: chat.name,
     blocked: chat.blocked,
     createdAt: chat.createdAt,
-    expiresAt: expiresOf(chat),
+    expiresAt: expiresOf(chat, on),
   };
   if (role !== "admin") return base;
   return { ...base, ip: chat.ip, location: chat.location, userAgent: chat.userAgent };
@@ -222,6 +238,7 @@ async function receivedCounts(fileIds) {
  */
 export async function syncChat(chat, role, { after = 0, typing = false, visible = true, touch = true } = {}) {
   const now = Date.now();
+  const on = await autoDeleteOn();
   const cursor = Number.isInteger(after) && after > 0 ? after : 0;
 
   const messages = await db
@@ -244,7 +261,7 @@ export async function syncChat(chat, role, { after = 0, typing = false, visible 
   if (touch) await db.update(transferChats).set(update).where(eq(transferChats.id, chat.id));
 
   return {
-    chat: chatView(chat, role),
+    chat: chatView(chat, role, on),
     peer: {
       online: now - (chat[`${peer}SeenAt`] ?? 0) < ONLINE_MS,
       typing: now - (chat[`${peer}TypingAt`] ?? 0) < TYPING_MS,
@@ -274,9 +291,9 @@ function assertOpen(chat, role) {
   if (role === "guest" && chat.blocked) throw new HttpError(403, "This chat was closed by the admin.");
 }
 
-export async function postMessage(chat, role, body) {
+export async function postMessage(chat, role, body, { max = MAX_MESSAGE } = {}) {
   assertOpen(chat, role);
-  const text = cleanText(body, MAX_MESSAGE);
+  const text = cleanText(body, max);
   if (!text) throw new HttpError(400, "Type a message first.");
 
   if (role === "guest") {
@@ -325,7 +342,7 @@ export async function createFile(chat, role, { name, size, type }) {
       chunkSize: CHUNK_SIZE,
       chunkCount: Math.max(1, Math.ceil(bytes / CHUNK_SIZE)),
       createdAt: Date.now(),
-      expiresAt: expiresOf(chat),
+      expiresAt: chat.createdAt + RETENTION_MS,
     })
     .returning();
   return { id: file.id, chunkSize: file.chunkSize, chunkCount: file.chunkCount };
@@ -333,7 +350,7 @@ export async function createFile(chat, role, { name, size, type }) {
 
 export async function getFile(id) {
   const file = await db.query.transferFiles.findFirst({ where: eq(transferFiles.id, String(id)) });
-  if (!file || file.expiresAt < Date.now()) throw new HttpError(404, "This file is no longer available.");
+  if (!file || ((await autoDeleteOn()) && file.expiresAt < Date.now())) throw new HttpError(404, "This file is no longer available.");
   return file;
 }
 
@@ -387,7 +404,7 @@ export async function ingestFile(chat, role, { name, type }, source) {
       chunkSize: CHUNK_SIZE,
       chunkCount: 0,
       createdAt: Date.now(),
-      expiresAt: expiresOf(chat),
+      expiresAt: chat.createdAt + RETENTION_MS,
     })
     .returning();
 
@@ -478,8 +495,9 @@ export async function listChats() {
   const lastByChat = new Map(last.map((message) => [message.chatId, messageView(message, filesById)]));
 
   const now = Date.now();
+  const on = await autoDeleteOn();
   return chats.map(({ chat, unread: total }) => ({
-    ...chatView(chat, "admin"),
+    ...chatView(chat, "admin", on),
     activeAt: chat.activeAt,
     unread: total ?? 0,
     online: now - (chat.guestSeenAt ?? 0) < ONLINE_MS,
@@ -491,7 +509,8 @@ export async function listChats() {
 /** Finished files for a zip, oldest first: one chat, or every chat when chatId is null. */
 export async function readyFiles(chatId) {
   const now = Date.now();
-  const where = [eq(transferFiles.status, "ready"), gt(transferFiles.expiresAt, now)];
+  const where = [eq(transferFiles.status, "ready")];
+  if (await autoDeleteOn()) where.push(gt(transferFiles.expiresAt, now));
   if (chatId) where.push(eq(transferFiles.chatId, chatId));
   const rows = await db
     .select({ file: transferFiles, chatName: transferChats.name })
@@ -503,6 +522,7 @@ export async function readyFiles(chatId) {
 }
 
 export async function listFiles() {
+  const on = await autoDeleteOn();
   const rows = await db
     .select({ file: transferFiles, chatName: transferChats.name })
     .from(transferFiles)
@@ -514,6 +534,6 @@ export async function listFiles() {
     chatId: file.chatId,
     chatName,
     createdAt: file.createdAt,
-    expiresAt: file.expiresAt,
+    expiresAt: on ? file.expiresAt : null,
   }));
 }

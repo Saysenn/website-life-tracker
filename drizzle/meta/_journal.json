@@ -92,6 +92,13 @@
       "when": 1794318376038,
       "tag": "0012_file_transfer",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1794327296138,
+      "tag": "0013_transfer_auto_delete",
+      "breakpoints": true
     }
   ]
 }

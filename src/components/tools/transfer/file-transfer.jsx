@@ -31,7 +31,9 @@ import { ConfirmDialog } from "@/components/ui/dialog";
 import { Page } from "@/components/ui/page";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip } from "@/components/ui/tooltip";
+import { RETENTION_DAYS } from "@/lib/transfer/constants";
 import { formatBytes } from "@/lib/tools/files";
 import { cn, plural } from "@/lib/utils";
 import { ToolHeader } from "../tool-header";
@@ -44,6 +46,11 @@ import { FileGlyph, Thread } from "./thread";
 const LIST_FAST = 4000;
 const LIST_SLOW = 15000;
 const noop = () => () => {};
+const RETENTION = `${RETENTION_DAYS} days`;
+
+function deletesIn(expiresAt, now) {
+  return expiresAt ? `deletes in ${countdown(expiresAt - now)}` : "kept until you delete it";
+}
 
 function Avatar({ name, online, className }) {
   return (
@@ -73,7 +80,52 @@ function copy(text, label) {
   );
 }
 
-function LinkCard({ linkKey, onRotate, stats }) {
+function AutoDelete({ value, onChange }) {
+  const [saving, setSaving] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+
+  const save = async (next) => {
+    setSaving(true);
+    onChange(next);
+    try {
+      await call("/api/transfer/admin/settings", { body: { autoDelete: next } });
+      toast.success(next ? `Auto-delete on · ${RETENTION}` : "Auto-delete off", {
+        description: next
+          ? `Chats and files delete ${RETENTION} after they start.`
+          : "Chats and files stay until you delete them.",
+      });
+    } catch (error) {
+      onChange(!next);
+      toast.error(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <label className="inline-flex cursor-pointer items-center gap-2">
+        <Timer className="size-[1.3rem]" />
+        <span>Delete chats and files after {RETENTION}</span>
+        <Switch
+          checked={value}
+          disabled={saving}
+          onCheckedChange={(next) => (next ? setConfirm(true) : save(false))}
+        />
+      </label>
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title="Turn auto-delete back on?"
+        description={`Chats that started more than ${RETENTION} ago are deleted straight away, with all their files.`}
+        confirmLabel="Turn on"
+        onConfirm={() => save(true)}
+      />
+    </>
+  );
+}
+
+function LinkCard({ linkKey, onRotate, stats, autoDelete, onAutoDelete }) {
   const [confirm, setConfirm] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [, rerender] = useReducer((count) => count + 1, 0);
@@ -176,10 +228,7 @@ function LinkCard({ linkKey, onRotate, stats }) {
           <ShieldCheck className="size-[1.3rem] text-success" />
           Encrypted at rest
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Timer className="size-[1.3rem]" />
-          Chats and files delete 24 hours after they start
-        </span>
+        <AutoDelete value={autoDelete} onChange={onAutoDelete} />
         <span className="tabular-nums">
           {plural(stats.chats, "chat")} · {plural(stats.files, "file")} ·{" "}
           {formatBytes(stats.bytes)} stored
@@ -367,7 +416,9 @@ function ChatHeader({
             <Detail icon={MonitorSmartphone}>{device(info.userAgent)}</Detail>
           )}
           <Detail icon={Timer}>
-            Deletes in {countdown(info.expiresAt - now)}
+            {info.expiresAt
+              ? `Deletes in ${countdown(info.expiresAt - now)}`
+              : "Kept until you delete it"}
           </Detail>
         </div>
       </div>
@@ -414,7 +465,7 @@ function FilesList({ files, onOpenChat, onDelete }) {
   if (!files.length) {
     return (
       <div className="mt-4 rounded-2xl bg-surface px-6 py-14 text-center shadow-card">
-        <p className="text-sm font-medium">No files in the last 24 hours</p>
+        <p className="text-sm font-medium">No files yet</p>
         <p className="mt-0.5 text-xs text-ink-3">
           Everything sent either way shows up here until it is deleted.
         </p>
@@ -450,8 +501,8 @@ function FilesList({ files, onOpenChat, onDelete }) {
                 {file.sender === "guest"
                   ? `From ${file.chatName}`
                   : `To ${file.chatName}`}{" "}
-                · {timeAgo(file.createdAt, now)} · deletes in{" "}
-                {countdown(file.expiresAt - now)}
+                · {timeAgo(file.createdAt, now)} ·{" "}
+                {deletesIn(file.expiresAt, now)}
               </p>
             </div>
             <Tooltip label="Open chat">
@@ -491,8 +542,14 @@ function FilesList({ files, onOpenChat, onDelete }) {
   );
 }
 
-export function FileTransfer({ linkKey, initialChat, full = true }) {
+export function FileTransfer({
+  linkKey,
+  autoDelete: initialAutoDelete = true,
+  initialChat,
+  full = true,
+}) {
   const [key, setKey] = useState(linkKey);
+  const [autoDelete, setAutoDelete] = useState(initialAutoDelete);
   const [tab, setTab] = useState("chats");
   const [selected, setSelected] = useState(initialChat || null);
   const [data, setData] = useState({ chats: null, files: null });
@@ -638,11 +695,21 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
         icon="transfer"
         title="File transfer"
         description="Swap files of any type with anyone you send your link to, and chat with them live."
-        badge="Encrypted · deleted automatically after 24 hours"
+        badge={
+          autoDelete
+            ? `Encrypted · deleted automatically after ${RETENTION}`
+            : "Encrypted · auto-delete off"
+        }
         back={full}
       />
 
-      <LinkCard linkKey={key} onRotate={setKey} stats={stats} />
+      <LinkCard
+        linkKey={key}
+        onRotate={setKey}
+        stats={stats}
+        autoDelete={autoDelete}
+        onAutoDelete={setAutoDelete}
+      />
 
       <div className="mt-5 flex items-center gap-3">
         <Segmented
@@ -715,7 +782,7 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
                   <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                     <p className="text-sm font-medium">This chat is gone</p>
                     <p className="mt-0.5 text-xs text-ink-3">
-                      It was deleted or passed its 24 hours.
+                      It was deleted or passed its {RETENTION}.
                     </p>
                     <Button
                       variant="soft"
@@ -729,8 +796,9 @@ export function FileTransfer({ linkKey, initialChat, full = true }) {
                 )}
                 empty={
                   <p className="m-auto max-w-[32rem] text-center text-xs text-ink-3">
-                    Say hello, or drop files here to send them. Everything in
-                    this chat is deleted 24 hours after it started.
+                    Say hello, or drop files here to send them.
+                    {autoDelete &&
+                      ` Everything in this chat is deleted ${RETENTION} after it started.`}
                   </p>
                 }
               />

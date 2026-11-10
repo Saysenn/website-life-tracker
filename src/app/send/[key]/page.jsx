@@ -1,7 +1,7 @@
 import { Link2Off } from "lucide-react";
 import { GuestTransfer } from "@/components/tools/transfer/guest-transfer";
 import { guestChat } from "@/lib/transfer/access";
-import { linkMatches } from "@/lib/transfer/store";
+import { autoDeleteOn, linkMatches } from "@/lib/transfer/store";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function SendPage({ params }) {
   const { key } = await params;
-  const [valid, chat] = await Promise.all([linkMatches(key), guestChat()]);
+  const [valid, chat, autoDelete] = await Promise.all([linkMatches(key), guestChat(), autoDeleteOn()]);
 
   if (!valid && !chat) {
     return (
@@ -29,5 +29,5 @@ export default async function SendPage({ params }) {
     );
   }
 
-  return <GuestTransfer linkKey={key} started={Boolean(chat)} />;
+  return <GuestTransfer linkKey={key} autoDelete={autoDelete} started={Boolean(chat)} />;
 }

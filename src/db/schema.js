@@ -117,6 +117,7 @@ export const transferLink = sqliteTable("transfer_link", {
   id: integer("id").primaryKey(),
   key: text("key").notNull(),
   rotatedAt: integer("rotated_at").notNull(),
+  autoDelete: integer("auto_delete", { mode: "boolean" }).notNull().default(true),
 });
 
 export const transferChats = sqliteTable(

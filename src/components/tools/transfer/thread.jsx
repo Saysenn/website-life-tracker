@@ -5,6 +5,7 @@ import {
   Check,
   CheckCheck,
   CloudUpload,
+  Copy,
   Download,
   File,
   FileArchive,
@@ -98,6 +99,47 @@ function FileCard({ file, mine }) {
   );
 }
 
+const LONG_TEXT = 1500;
+
+function TextBubble({ body, mine }) {
+  const [open, setOpen] = useState(false);
+  const long = body.length > LONG_TEXT;
+  const copy = () =>
+    navigator.clipboard.writeText(body).then(
+      () => toast.success("Message copied"),
+      () => toast.error("Could not copy"),
+    );
+  return (
+    <div
+      className={cn(
+        "max-w-[min(52rem,85%)] rounded-2xl px-3.5 py-2 text-base break-words whitespace-pre-wrap",
+        mine ? "rounded-br-md bg-ink text-ground" : "rounded-bl-md bg-surface text-ink shadow-card",
+      )}
+    >
+      {long && !open ? `${body.slice(0, LONG_TEXT).trimEnd()}…` : body}
+      {long && (
+        <div className={cn("mt-2 flex gap-1.5 border-t pt-2 whitespace-normal", mine ? "border-ground/15" : "border-grid")}>
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            className={cn("rounded-md px-2 py-1 text-xs font-medium transition-colors", mine ? "hover:bg-ground/12" : "hover:bg-hover")}
+          >
+            {open ? "Show less" : `Show all · ${body.length.toLocaleString()} characters`}
+          </button>
+          <button
+            type="button"
+            onClick={copy}
+            className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors", mine ? "hover:bg-ground/12" : "hover:bg-hover")}
+          >
+            <Copy className="size-[1.2rem]" />
+            Copy
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Bubble({ message, mine, status }) {
   const file = message.file;
   return (
@@ -105,14 +147,7 @@ function Bubble({ message, mine, status }) {
       {file ? (
         <FileCard file={file} mine={mine} />
       ) : (
-        <div
-          className={cn(
-            "max-w-[min(52rem,85%)] rounded-2xl px-3.5 py-2 text-base break-words whitespace-pre-wrap",
-            mine ? "rounded-br-md bg-ink text-ground" : "rounded-bl-md bg-surface text-ink shadow-card",
-          )}
-        >
-          {message.body ?? "Message could not be read"}
-        </div>
+        <TextBubble body={message.body ?? "Message could not be read"} mine={mine} />
       )}
       <span className="flex items-center gap-1 px-1 text-2xs text-ink-4 tabular-nums">
         {clock(message.createdAt)}

@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { transferChats } from "@/db/schema";
 import { clientIp } from "@/lib/login";
-import { RETENTION_MS } from "./constants";
+import { autoDeleteOn, expiryOf } from "./settings";
 import { hashToken, sameText } from "./crypto";
 
 export const GUEST_COOKIE = "ft_guest";
@@ -60,7 +60,9 @@ export async function guestChat() {
   const [chatId, token] = raw.split(".");
   if (!chatId || !token) return null;
   const chat = await db.query.transferChats.findFirst({ where: eq(transferChats.id, chatId) });
-  if (!chat || !sameText(chat.tokenHash, hashToken(token)) || chat.createdAt + RETENTION_MS < Date.now()) return null;
+  if (!chat || !sameText(chat.tokenHash, hashToken(token))) return null;
+  const expires = expiryOf(chat.createdAt, await autoDeleteOn());
+  if (expires && expires < Date.now()) return null;
   return chat;
 }
 
@@ -76,7 +78,7 @@ export async function setGuestCookie(chat, token) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
-    expires: new Date(chat.createdAt + RETENTION_MS),
+    expires: new Date(expiryOf(chat.createdAt, await autoDeleteOn()) ?? Date.now() + 400 * 24 * 60 * 60 * 1000),
   });
 }
 

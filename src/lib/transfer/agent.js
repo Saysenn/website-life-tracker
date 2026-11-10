@@ -2,7 +2,7 @@ import "server-only";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { HttpError } from "./access";
-import { HOST_NAME, INLINE_TYPES } from "./constants";
+import { HOST_NAME, INLINE_TYPES, MAX_AGENT_MESSAGE } from "./constants";
 import { sameText } from "./crypto";
 import { notifyAdmin } from "./notify";
 import {
@@ -125,7 +125,7 @@ export const TOOLS = [
   {
     name: "list_chats",
     description:
-      "Lists every file transfer chat from the last 24 hours, newest activity first, with the visitor's name, IP, location, unread count and last message.",
+      "Lists every file transfer chat, newest activity first, with the visitor's name, IP, location, unread count and last message.",
     inputSchema: { type: "object", properties: {} },
     run: async () => {
       await purgeExpired();
@@ -138,7 +138,7 @@ export const TOOLS = [
         unread: chat.unread,
         closed: chat.blocked,
         lastActivity: new Date(chat.activeAt).toISOString(),
-        deletesAt: new Date(chat.expiresAt).toISOString(),
+        deletesAt: chat.expiresAt ? new Date(chat.expiresAt).toISOString() : null,
         lastMessage: chat.last ? (chat.last.file ? `[file] ${chat.last.file.name}` : chat.last.body) : null,
       }));
     },
@@ -155,7 +155,7 @@ export const TOOLS = [
     run: async ({ chat_id, after = 0 }) => {
       const data = await syncChat(await getChat(chat_id), "admin", { after, touch: false });
       return {
-        chat: { ...data.chat, createdAt: new Date(data.chat.createdAt).toISOString(), expiresAt: new Date(data.chat.expiresAt).toISOString() },
+        chat: { ...data.chat, createdAt: new Date(data.chat.createdAt).toISOString(), expiresAt: data.chat.expiresAt ? new Date(data.chat.expiresAt).toISOString() : null },
         visitorOnline: data.peer.online,
         messages: data.messages.map((message) => ({
           id: message.id,
@@ -173,18 +173,22 @@ export const TOOLS = [
   {
     name: "send_message",
     description:
-      "Sends a text message. Without chat_id it goes to the admin in the Grok chat. With a chat_id it answers that visitor as the admin.",
+      "Sends a plain text message, including long responses (up to 200,000 characters, line breaks kept). Without chat_id it goes to the admin in the Grok chat. With a chat_id it answers that visitor as the admin.",
     inputSchema: {
       type: "object",
       properties: {
         chat_id: { type: "string", description: "Leave out to message the admin" },
-        text: { type: "string", description: "Up to 4000 characters" },
+        text: { type: "string", description: "The message, up to 200,000 characters" },
       },
       required: ["text"],
     },
     run: async ({ chat_id, text }) => {
+      const length = String(text ?? "").length;
+      if (length > MAX_AGENT_MESSAGE) {
+        throw new HttpError(413, `That message is ${length} characters; the limit is ${MAX_AGENT_MESSAGE}. Split it, or send it with upload_file content_text.`);
+      }
       const { chat, role } = await target(chat_id);
-      const message = await postMessage(chat, role, text);
+      const message = await postMessage(chat, role, text, { max: MAX_AGENT_MESSAGE });
       if (role === "guest") notifyAdmin({ type: "message", chat });
       return { sent: true, chat_id: chat.id, message_id: message.id };
     },
@@ -192,31 +196,38 @@ export const TOOLS = [
   {
     name: "upload_file",
     description:
-      "Sends a file. Without chat_id it is delivered to the admin in the Grok chat. With a chat_id it goes to that visitor as the admin. Give either source_url (an https link the server downloads, up to 2 GB) or content_base64 (up to 3 MB) with file_name.",
+      "Sends a file. Without chat_id it is delivered to the admin in the Grok chat. With a chat_id it goes to that visitor as the admin. Give one of source_url (an https link the server downloads, up to 2 GB), content_text (plain text such as a long response, saved as a .md or .txt file, up to 3 MB) or content_base64 (up to 3 MB) with file_name.",
     inputSchema: {
       type: "object",
       properties: {
         chat_id: { type: "string", description: "Leave out to deliver the file to the admin" },
         source_url: { type: "string", description: "https link to download the file from" },
+        content_text: { type: "string", description: "Plain text to save as a file, no encoding needed" },
         content_base64: { type: "string", description: "The file itself, base64 encoded" },
-        file_name: { type: "string", description: "Name to show. Required with content_base64" },
+        file_name: { type: "string", description: "Name to show. Required with content_base64; defaults to response.md with content_text" },
         mime_type: { type: "string", description: "For example application/pdf" },
       },
     },
-    run: async ({ chat_id, source_url, content_base64, file_name, mime_type }) => {
+    run: async ({ chat_id, source_url, content_text, content_base64, file_name, mime_type }) => {
       const { chat, role } = await target(chat_id);
       let result;
       if (source_url) {
         const { response, url } = await safeFetch(source_url);
         const type = mime_type || response.headers.get("content-type")?.split(";")[0];
         result = await ingestFile(chat, role, { name: file_name || nameFromResponse(response, url), type }, response.body);
+      } else if (typeof content_text === "string" && content_text) {
+        const data = Buffer.from(content_text, "utf8");
+        if (data.length > BASE64_LIMIT) throw new HttpError(413, "content_text can be up to 3 MB.");
+        const name = file_name || "response.md";
+        const type = mime_type || (/\.md$/i.test(name) ? "text/markdown" : "text/plain");
+        result = await ingestFile(chat, role, { name, type }, [data]);
       } else if (content_base64) {
         if (!file_name) throw new HttpError(400, "file_name is required with content_base64.");
         const data = Buffer.from(content_base64, "base64");
         if (data.length > BASE64_LIMIT) throw new HttpError(413, "Use source_url for files over 3 MB.");
         result = await ingestFile(chat, role, { name: file_name, type: mime_type }, [data]);
       } else {
-        throw new HttpError(400, "Give source_url or content_base64.");
+        throw new HttpError(400, "Give source_url, content_text or content_base64.");
       }
       const { file } = result.message;
       if (role === "guest") notifyAdmin({ type: "file", chat: result.chat, name: file.name, size: file.size });
@@ -225,7 +236,7 @@ export const TOOLS = [
   },
   {
     name: "list_files",
-    description: "Lists every file sent either way in the last 24 hours, with who sent it and when it gets deleted.",
+    description: "Lists every file sent either way, with who sent it and when it gets deleted (null when auto-delete is off).",
     inputSchema: { type: "object", properties: {} },
     run: async () =>
       (await listFiles()).map((file) => ({
@@ -236,7 +247,7 @@ export const TOOLS = [
         chat_id: file.chatId,
         direction: file.sender === "guest" ? `from ${file.chatName}` : `to ${file.chatName}`,
         sentAt: new Date(file.createdAt).toISOString(),
-        deletesAt: new Date(file.expiresAt).toISOString(),
+        deletesAt: file.expiresAt ? new Date(file.expiresAt).toISOString() : null,
       })),
   },
   {
