@@ -34,13 +34,13 @@ export function agentAccess(request) {
   if (!key) return "disabled";
   const header = request.headers.get("authorization") ?? "";
   const fromHeader = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  const fromPath = decodeURIComponent(request.nextUrl.pathname.match(/^\/api\/mcp\/([^/]+)$/)?.[1] ?? "");
+  const fromPath = decodeURIComponent(request.nextUrl.pathname.match(/^\/api\/(?:mcp|cleaner)\/([^/]+)$/)?.[1] ?? "");
   const token = fromHeader || fromPath;
   return token && sameText(token, key) ? "ok" : "denied";
 }
 
 /** No chat_id means the assistant is delivering to the admin, so it goes in the Grok chat as incoming. */
-async function target(chat_id) {
+export async function target(chat_id) {
   if (chat_id) return { chat: await getChat(chat_id), role: "admin" };
   const { chat, created } = await agentChat();
   if (created) notifyAdmin({ type: "start", chat });
@@ -74,7 +74,7 @@ function privateAddress(address) {
   );
 }
 
-async function safeFetch(link) {
+export async function safeFetch(link) {
   let url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     try {
@@ -98,7 +98,7 @@ async function safeFetch(link) {
   throw new HttpError(400, "That link redirects too many times.");
 }
 
-function nameFromResponse(response, url) {
+export function nameFromResponse(response, url) {
   const disposition = response.headers.get("content-disposition") ?? "";
   const star = disposition.match(/filename\*=UTF-8''([^;]+)/i);
   if (star) {
@@ -280,11 +280,4 @@ export const TOOLS = [
     },
   },
 ];
-
-export async function runTool(name, args = {}) {
-  const tool = TOOLS.find((entry) => entry.name === name);
-  if (!tool) throw new HttpError(404, `Unknown tool ${name}.`);
-  const result = await tool.run(args ?? {});
-  return result?.content ? result : { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-}
 

@@ -1,4 +1,5 @@
 import { LogOut } from "lucide-react";
+import { FilesNav } from "./files-nav";
 import { logout } from "@/actions/auth";
 import { BrandMark } from "./brand";
 
@@ -8,7 +9,7 @@ export function FilesShell({ children }) {
     <div className="flex h-dvh flex-col overflow-hidden">
       <header className="flex h-13 shrink-0 items-center gap-2.5 px-4 lg:px-8">
         <BrandMark />
-        <span className="text-base font-semibold tracking-tight">File transfer</span>
+        <FilesNav />
         <form action={logout} className="ml-auto">
           <button
             type="submit"

@@ -168,6 +168,8 @@ The file transfer tool has an MCP server, so an assistant such as Grok can use i
    `https://your-app.vercel.app/api/mcp/<AGENT_API_KEY>`
    (Or `https://your-app.vercel.app/api/mcp` with the header `Authorization: Bearer <AGENT_API_KEY>`.)
 
+A second server cleans metadata, with the same key: `https://your-app.vercel.app/api/cleaner/<AGENT_API_KEY>`. Its `clean_metadata` tool takes a transfer `file_id`, an https link or base64, strips GPS, camera, author and date details, saves the clean copy to the Grok chat (or a visitor's chat with `chat_id`) and returns it inline up to 3 MB. The file transfer login can also open the Metadata cleaner page.
+
 When the assistant calls `upload_file` or `send_message` without a `chat_id`, it lands in a chat called Grok in your inbox with the usual alerts.
 
 Tools: `get_transfer_link`, `list_chats`, `read_chat`, `send_message`, `upload_file` (from an https link up to 2 GB, or base64 up to 3 MB), `list_files`, `read_file`, `close_chat`, `delete_chat`. The assistant acts as the admin, but only inside file transfer. It cannot open the rest of the site, and the device lock does not apply to it because the token guards it instead. Change the key to cut it off.

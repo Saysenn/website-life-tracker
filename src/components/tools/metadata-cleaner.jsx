@@ -45,7 +45,7 @@ const statusLabel = (item) =>
     error: "Skipped",
   })[item.status];
 
-export function MetadataCleaner() {
+export function MetadataCleaner({ full = true }) {
   const { items, add, start, remove, clear, stats } = useFileQueue(stripMetadata);
   const [suffix, setSuffix] = useState(true);
   const [zipping, setZipping] = useState(false);
@@ -76,6 +76,7 @@ export function MetadataCleaner() {
     <Page className="max-w-[76rem]">
       <ToolHeader
         icon="eraser"
+        back={full}
         title="Metadata cleaner"
         description="Drop one file or a whole batch — hidden details like GPS, camera, author and dates are stripped without touching quality."
       />

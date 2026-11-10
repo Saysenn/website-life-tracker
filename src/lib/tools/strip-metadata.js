@@ -501,6 +501,20 @@ const CLEANERS = {
 
 export const SUPPORTED_LABEL = "JPG, PNG, WebP, GIF, SVG, PDF, Word, Excel, PowerPoint, OpenDocument, MP3, MP4, MOV, M4A";
 
+/**
+ * Cleans bytes already in memory, for the server. Returns { bytes, removed, note } and throws
+ * a plain Error for types that cannot be cleaned.
+ */
+export async function cleanBytes(bytes, name) {
+  if (!bytes.length) throw new Error("This file is empty");
+  const kind = detectKind(bytes, name);
+  if (kind === "heif") throw new Error("HEIC/AVIF can't be cleaned yet");
+  if (kind === "text") return { bytes, removed: [], note: "Plain text has no hidden metadata" };
+  if (kind === "unknown") throw new Error(`.${extensionOf(name) || "?"} files aren't supported yet`);
+  const result = await CLEANERS[kind](bytes);
+  return { bytes: result.bytes, removed: result.removed, note: result.removed.length ? null : "No metadata found" };
+}
+
 /** Queue processor: reads, cleans and returns a ready-to-download blob. */
 export async function stripMetadata(file, onProgress, { suffix = true } = {}) {
   if (file.size === 0) throw new Error("This file is empty");

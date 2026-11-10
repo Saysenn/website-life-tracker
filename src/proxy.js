@@ -5,12 +5,14 @@ import { authConfig } from "./auth.config";
 const { auth } = NextAuth(authConfig);
 
 const FILES_HOME = "/tools/file-transfer";
+/** Pages the file transfer account may open. */
+const FILES_PAGES = new Set([FILES_HOME, "/tools/metadata-cleaner"]);
 const FILES_LOGIN = "/files";
 const DEVICE_COOKIE = "lt_device";
 const DEVICE_MAX_AGE = 400 * 24 * 60 * 60;
 
 /** Reachable from any device: file transfer guests, the token guarded agent API and the cron. */
-const PUBLIC = [/^\/send\//, /^\/api\/mcp(\/[^/]+)?$/, /^\/api\/transfer\/(guest|files)\//, /^\/api\/cron\//];
+const PUBLIC = [/^\/send\//, /^\/api\/(mcp|cleaner)(\/[^/]+)?$/, /^\/api\/transfer\/(guest|files)\//, /^\/api\/cron\//];
 
 /** Checked by their own route handlers, so they skip the login redirect. */
 const SELF_GUARDED = [/^\/api\/auth\//, /^\/api\/transfer\//];
@@ -55,7 +57,7 @@ const guarded = auth(async (request) => {
   // The file transfer account has its own login and pages, open from any device.
   const role = request.auth?.user?.role;
   if (role === "files") {
-    const allowed = pathname === FILES_HOME || pathname.startsWith("/api/transfer/");
+    const allowed = FILES_PAGES.has(pathname) || pathname.startsWith("/api/transfer/");
     return allowed ? NextResponse.next() : NextResponse.redirect(new URL(FILES_HOME, request.nextUrl));
   }
   const unlocked = !expected || request.cookies.get(DEVICE_COOKIE)?.value === expected;
