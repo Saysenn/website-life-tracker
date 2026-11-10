@@ -63,7 +63,7 @@ export async function linkMatches(key) {
   return typeof key === "string" && key.length > 0 && sameText(await getLinkKey(), key);
 }
 
-/* Cleanup: a chat and everything in it is deleted 3 days after it started. */
+/* Cleanup: a chat and everything in it is deleted 24 hours after it started. */
 
 let lastPurge = 0;
 
@@ -139,6 +139,33 @@ export async function startChat({ name, ip, location, userAgent }) {
   return { chat, token };
 }
 
+const AGENT_CHAT_NAME = "Grok";
+
+/** The chat where the assistant's own files and notes land. Made again after each cleanup. */
+export async function agentChat() {
+  const now = Date.now();
+  const existing = await db.query.transferChats.findFirst({
+    where: and(eq(transferChats.ip, "agent"), gt(transferChats.createdAt, now - RETENTION_MS)),
+    orderBy: desc(transferChats.createdAt),
+  });
+  if (existing) return { chat: existing, created: false };
+  const [chat] = await db
+    .insert(transferChats)
+    .values({
+      id: randomId(12),
+      name: AGENT_CHAT_NAME,
+      tokenHash: hashToken(randomId(32)),
+      ip: "agent",
+      location: "AI assistant",
+      userAgent: "Grok via MCP",
+      createdAt: now,
+      activeAt: now,
+      guestSeenAt: now,
+    })
+    .returning();
+  return { chat, created: true };
+}
+
 export async function setBlocked(id, blocked) {
   await getChat(id);
   await db.update(transferChats).set({ blocked: Boolean(blocked) }).where(eq(transferChats.id, id));
@@ -193,7 +220,7 @@ async function receivedCounts(fileIds) {
  * One polling round. Marks this side as seen (and typing), advances the read
  * cursor when the page is visible, and returns everything after `after`.
  */
-export async function syncChat(chat, role, { after = 0, typing = false, visible = true } = {}) {
+export async function syncChat(chat, role, { after = 0, typing = false, visible = true, touch = true } = {}) {
   const now = Date.now();
   const cursor = Number.isInteger(after) && after > 0 ? after : 0;
 
@@ -214,7 +241,7 @@ export async function syncChat(chat, role, { after = 0, typing = false, visible 
   const mine = role === "admin" ? "admin" : "guest";
   const update = { [`${mine}SeenAt`]: now, [`${mine}TypingAt`]: typing ? now : null };
   if (visible && latestId > chat[`${mine}ReadId`]) update[`${mine}ReadId`] = latestId;
-  await db.update(transferChats).set(update).where(eq(transferChats.id, chat.id));
+  if (touch) await db.update(transferChats).set(update).where(eq(transferChats.id, chat.id));
 
   return {
     chat: chatView(chat, role),
@@ -340,6 +367,60 @@ export async function completeFile(file) {
   const chat = await getChat(file.chatId);
   const message = await addMessage(chat, file.sender, { fileId: file.id });
   return { chat, message: messageView(message, new Map([[file.id, updated[0]]])) };
+}
+
+/**
+ * Stores a file that arrives as a stream of unknown length, for uploads made
+ * on the server (the agent API). Parts are cut to CHUNK_SIZE as bytes arrive.
+ */
+export async function ingestFile(chat, role, { name, type }, source) {
+  assertOpen(chat, role);
+  const [file] = await db
+    .insert(transferFiles)
+    .values({
+      id: randomId(16),
+      chatId: chat.id,
+      sender: role,
+      name: cleanFileName(name),
+      type: cleanType(type),
+      size: 0,
+      chunkSize: CHUNK_SIZE,
+      chunkCount: 0,
+      createdAt: Date.now(),
+      expiresAt: expiresOf(chat),
+    })
+    .returning();
+
+  let size = 0;
+  let index = 0;
+  let pending = [];
+  let pendingBytes = 0;
+  const flush = async (bytes) => {
+    const data = Buffer.concat(pending, pendingBytes);
+    const part = data.subarray(0, bytes);
+    const rest = data.subarray(bytes);
+    await db.insert(transferChunks).values({ fileId: file.id, index, data: seal(part) });
+    index += 1;
+    pending = rest.length ? [rest] : [];
+    pendingBytes = rest.length;
+  };
+
+  try {
+    for await (const piece of source) {
+      const bytes = Buffer.from(piece);
+      size += bytes.length;
+      if (size > MAX_FILE_BYTES) throw new HttpError(413, "Files can be up to 2 GB each.");
+      pending.push(bytes);
+      pendingBytes += bytes.length;
+      while (pendingBytes >= CHUNK_SIZE) await flush(CHUNK_SIZE);
+    }
+    if (pendingBytes > 0 || index === 0) await flush(pendingBytes);
+    await db.update(transferFiles).set({ size, chunkCount: index }).where(eq(transferFiles.id, file.id));
+    return await completeFile({ ...file, size, chunkCount: index });
+  } catch (error) {
+    await deleteFileRows([file.id]);
+    throw error;
+  }
 }
 
 export async function deleteFile(file) {

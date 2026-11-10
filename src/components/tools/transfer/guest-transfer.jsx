@@ -23,7 +23,7 @@ function Promises({ className }) {
       </span>
       <span className="inline-flex items-center gap-1.5">
         <Timer className="size-[1.3rem]" />
-        Deleted after 3 days
+        Deleted after 24 hours
       </span>
       <span className="inline-flex items-center gap-1.5">
         <Lock className="size-[1.3rem]" />

@@ -36,7 +36,7 @@ Built with Next.js (App Router, plain JavaScript), Auth.js, Drizzle ORM on SQLit
 * File transfer tool: share a private link, then chat live with whoever opens it and swap files of any type both ways
 * Each chat shows the visitor's IP, location and device, with read receipts, typing and online status
 * Files upload in 3 MB parts with progress, speed and time left, retrying any part that fails, up to 2 GB per file
-* Files and messages are encrypted in the database, and a chat with everything in it is deleted 3 days after it starts
+* Files and messages are encrypted in the database, and a chat with everything in it is deleted 24 hours after it starts
 * New chats, messages and files raise a toast and desktop alert in the app, and an email when you are away
 
 ## Run locally
@@ -148,6 +148,25 @@ Vercel sends `CRON_SECRET` as a bearer token and the route rejects anything with
 | Too many attempts | Five failures from your IP | Wait 15 minutes |
 
 Project, then Logs, then attempt the sign in again. The entry that appears names the real error.
+
+## Lock the site to your devices
+
+Set `DEVICE_KEY` on Vercel (`openssl rand -hex 24`) and redeploy. From then on every page, the login included, answers 404 to any browser that has not been unlocked. File transfer guest links and the cron keep working.
+
+To unlock a device, open `https://your-app.vercel.app/unlock/<DEVICE_KEY>` in it once. It stays unlocked for 400 days, or until its cookies are cleared, then open the same link again. To lock every device out, change `DEVICE_KEY` and redeploy, then unlock the ones you still use.
+
+## Connect an AI assistant
+
+The file transfer tool has an MCP server, so an assistant such as Grok can use it the same way it uses Figma.
+
+1. Set `AGENT_API_KEY` on Vercel (`openssl rand -hex 32`) and redeploy.
+2. Add a remote MCP server to the assistant with this URL, no headers needed:
+   `https://your-app.vercel.app/api/mcp/<AGENT_API_KEY>`
+   (Or `https://your-app.vercel.app/api/mcp` with the header `Authorization: Bearer <AGENT_API_KEY>`.)
+
+When the assistant calls `upload_file` or `send_message` without a `chat_id`, it lands in a chat called Grok in your inbox with the usual alerts.
+
+Tools: `get_transfer_link`, `list_chats`, `read_chat`, `send_message`, `upload_file` (from an https link up to 2 GB, or base64 up to 3 MB), `list_files`, `read_file`, `close_chat`, `delete_chat`. The assistant acts as the admin, but only inside file transfer. It cannot open the rest of the site, and the device lock does not apply to it because the token guards it instead. Change the key to cut it off.
 
 ## Scripts
 

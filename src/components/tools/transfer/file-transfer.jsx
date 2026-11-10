@@ -146,7 +146,7 @@ function LinkCard({ linkKey, onRotate, stats }) {
         </span>
         <span className="inline-flex items-center gap-1.5">
           <Timer className="size-[1.3rem]" />
-          Chats and files delete 3 days after they start
+          Chats and files delete 24 hours after they start
         </span>
         <span className="tabular-nums">
           {plural(stats.chats, "chat")} · {plural(stats.files, "file")} · {formatBytes(stats.bytes)} stored
@@ -294,7 +294,7 @@ function FilesList({ files, onOpenChat, onDelete }) {
   if (!files.length) {
     return (
       <div className="mt-4 rounded-2xl bg-surface px-6 py-14 text-center shadow-card">
-        <p className="text-sm font-medium">No files in the last 3 days</p>
+        <p className="text-sm font-medium">No files in the last 24 hours</p>
         <p className="mt-0.5 text-xs text-ink-3">Everything sent either way shows up here until it is deleted.</p>
       </div>
     );
@@ -463,7 +463,7 @@ export function FileTransfer({ linkKey, initialChat }) {
         icon="transfer"
         title="File transfer"
         description="Swap files of any type with anyone you send your link to, and chat with them live."
-        badge="Encrypted · deleted automatically after 3 days"
+        badge="Encrypted · deleted automatically after 24 hours"
       />
 
       <LinkCard linkKey={key} onRotate={setKey} stats={stats} />
@@ -514,7 +514,7 @@ export function FileTransfer({ linkKey, initialChat }) {
                 renderEnded={() => (
                   <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                     <p className="text-sm font-medium">This chat is gone</p>
-                    <p className="mt-0.5 text-xs text-ink-3">It was deleted or passed its 3 days.</p>
+                    <p className="mt-0.5 text-xs text-ink-3">It was deleted or passed its 24 hours.</p>
                     <Button variant="soft" size="sm" className="mt-3" onClick={() => setSelected(null)}>
                       Back to chats
                     </Button>
@@ -522,7 +522,7 @@ export function FileTransfer({ linkKey, initialChat }) {
                 )}
                 empty={
                   <p className="m-auto max-w-[32rem] text-center text-xs text-ink-3">
-                    Say hello, or drop files here to send them. Everything in this chat is deleted 3 days after it started.
+                    Say hello, or drop files here to send them. Everything in this chat is deleted 24 hours after it started.
                   </p>
                 }
               />

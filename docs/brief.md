@@ -96,7 +96,8 @@ An archived service must not be counted in its group's totals.
 28. A Payment list button on the Preview page. A modal listing, per group, each company with how much and when it ends, then Total USDT needed and Total fee needed. Simple enough to photograph with a phone
 
 29. File transfer tool. A link anyone can open to send files of any type, with proper progress bars. The admin is notified and sees a live chat with that person, their IP included, and both sides can exchange files. Must be secure
-30. A chat and all its files clean up automatically once it is past 3 days
+30. A chat and all its files clean up automatically once it is past 3 days. Later shortened to 24 hours
+31. Grok must be able to send files through one never expiring link, with no login or headers
 
 ## Email rules
 

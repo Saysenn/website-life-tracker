@@ -1,4 +1,4 @@
-export const RETENTION_MS = 3 * 24 * 60 * 60 * 1000;
+export const RETENTION_MS = 24 * 60 * 60 * 1000;
 export const CHUNK_SIZE = 3 * 1024 * 1024;
 export const MAX_FILE_BYTES = 2 * 1024 ** 3;
 export const GUEST_QUOTA_BYTES = 3 * 1024 ** 3;
