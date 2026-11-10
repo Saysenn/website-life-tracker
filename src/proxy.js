@@ -5,6 +5,7 @@ import { authConfig } from "./auth.config";
 const { auth } = NextAuth(authConfig);
 
 const FILES_HOME = "/tools/file-transfer";
+const FILES_LOGIN = "/files";
 const DEVICE_COOKIE = "lt_device";
 const DEVICE_MAX_AGE = 400 * 24 * 60 * 60;
 
@@ -50,15 +51,21 @@ const guarded = auth(async (request) => {
   const { pathname, search } = request.nextUrl;
   const expected = await deviceDigest();
   if (pathname.startsWith("/unlock/")) return unlock(request, expected);
+
+  // The file transfer account has its own login and pages, open from any device.
+  const role = request.auth?.user?.role;
+  if (role === "files") {
+    const allowed = pathname === FILES_HOME || pathname.startsWith("/api/transfer/");
+    return allowed ? NextResponse.next() : NextResponse.redirect(new URL(FILES_HOME, request.nextUrl));
+  }
+  if (pathname === FILES_LOGIN) return role ? NextResponse.redirect(new URL("/", request.nextUrl)) : NextResponse.next();
+
+  // Everything else, the admin login included, only answers on an unlocked device.
   if (expected && request.cookies.get(DEVICE_COOKIE)?.value !== expected) return notFound();
 
   if (SELF_GUARDED.some((pattern) => pattern.test(pathname))) return NextResponse.next();
 
   const onLogin = pathname === "/login";
-  if (request.auth?.user?.role === "files") {
-    const allowed = pathname === FILES_HOME || pathname.startsWith("/api/");
-    return allowed ? NextResponse.next() : NextResponse.redirect(new URL(FILES_HOME, request.nextUrl));
-  }
   if (request.auth) return onLogin ? NextResponse.redirect(new URL("/", request.nextUrl)) : NextResponse.next();
   if (onLogin) return NextResponse.next();
 

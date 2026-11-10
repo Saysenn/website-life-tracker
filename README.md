@@ -157,7 +157,7 @@ To unlock a device, open `https://your-app.vercel.app/unlock/<DEVICE_KEY>` in it
 
 ## File transfer only login
 
-Set `FILES_USERNAME` and `FILES_PASSWORD` on Vercel and redeploy. Signing in with them opens File transfer and nothing else: no sidebar, no companies, no settings, and every other page or action is refused. With the device lock on, that device also needs the unlock link once.
+Set `FILES_USERNAME` and `FILES_PASSWORD` on Vercel and redeploy. They sign in at `/files`, which works from any device even with the device lock on, and only accepts this account. It opens File transfer and nothing else: no sidebar, no companies, no settings, and every other page or action is refused. The admin login at `/login` stays locked to your unlocked devices.
 
 ## Connect an AI assistant
 

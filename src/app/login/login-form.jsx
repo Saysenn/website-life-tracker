@@ -6,8 +6,8 @@ import { login } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 
-export function LoginForm({ next }) {
-  const [state, action, pending] = useActionState(login, undefined);
+export function LoginForm({ next = "", action: submit = login }) {
+  const [state, action, pending] = useActionState(submit, undefined);
   const [visible, setVisible] = useState(false);
 
   return (
