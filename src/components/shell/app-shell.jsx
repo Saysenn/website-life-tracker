@@ -9,6 +9,7 @@ import { Sheet } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
+import { useTransferWatcher } from "@/components/tools/transfer/transfer-watcher";
 import { GroupModal } from "./group-modal";
 import { Notifications } from "./notifications";
 
@@ -23,7 +24,7 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-function Sidebar({ groups, alerts, onNavigate, onOpenGroup }) {
+function Sidebar({ groups, alerts, transferUnread, onNavigate, onOpenGroup }) {
   const pathname = usePathname();
 
   return (
@@ -54,6 +55,11 @@ function Sidebar({ groups, alerts, onNavigate, onOpenGroup }) {
               {href === "/companies" && alerts.length > 0 && (
                 <span className="ml-auto rounded-full bg-warning-soft px-1.5 text-2xs font-semibold text-warning tabular-nums">
                   {alerts.length}
+                </span>
+              )}
+              {href === "/tools" && transferUnread > 0 && (
+                <span className="ml-auto rounded-full bg-danger px-1.5 text-2xs font-semibold text-white tabular-nums">
+                  {transferUnread}
                 </span>
               )}
             </Link>
@@ -109,11 +115,12 @@ function Sidebar({ groups, alerts, onNavigate, onOpenGroup }) {
 export function AppShell({ groups, alerts, panels, today, currency, children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState(null);
+  const transferUnread = useTransferWatcher(usePathname());
 
   return (
     <div className="flex h-dvh overflow-hidden">
       <aside className="hidden w-[24rem] shrink-0 lg:flex">
-        <Sidebar groups={groups} alerts={alerts} onOpenGroup={setOpenGroup} />
+        <Sidebar groups={groups} alerts={alerts} transferUnread={transferUnread} onOpenGroup={setOpenGroup} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -135,7 +142,13 @@ export function AppShell({ groups, alerts, panels, today, currency, children }) 
       </div>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen} side="left" title="Menu" className="bg-ground">
-        <Sidebar groups={groups} alerts={alerts} onNavigate={() => setMenuOpen(false)} onOpenGroup={setOpenGroup} />
+        <Sidebar
+          groups={groups}
+          alerts={alerts}
+          transferUnread={transferUnread}
+          onNavigate={() => setMenuOpen(false)}
+          onOpenGroup={setOpenGroup}
+        />
       </Sheet>
 
       <GroupModal

@@ -4,6 +4,7 @@ import { TIMEZONE } from "@/lib/data";
 import { hourIn } from "@/lib/dates";
 import { updateRates } from "@/lib/rates";
 import { roundFor, runReminders } from "@/lib/reminders";
+import { purgeExpired } from "@/lib/transfer/store";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,12 @@ export async function GET(request) {
   } catch (error) {
     rates = "unchanged";
     console.error("Rate refresh failed", error);
+  }
+
+  try {
+    await purgeExpired({ force: true });
+  } catch (error) {
+    console.error("File transfer cleanup failed", error);
   }
 
   const round = roundOf(request);

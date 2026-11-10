@@ -95,6 +95,9 @@ An archived service must not be counted in its group's totals.
 27. On the Preview page, replace 30 days with This month, meaning everything due for renewal in the current month
 28. A Payment list button on the Preview page. A modal listing, per group, each company with how much and when it ends, then Total USDT needed and Total fee needed. Simple enough to photograph with a phone
 
+29. File transfer tool. A link anyone can open to send files of any type, with proper progress bars. The admin is notified and sees a live chat with that person, their IP included, and both sides can exchange files. Must be secure
+30. A chat and all its files clean up automatically once it is past 3 days
+
 ## Email rules
 
 * One digest at **12:00** Dubai time every day

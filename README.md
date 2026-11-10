@@ -33,6 +33,11 @@ Built with Next.js (App Router, plain JavaScript), Auth.js, Drizzle ORM on SQLit
 * Overdue rows say which day of the grace period they are on, or that they need rebuying
 * In app notifications, optimistic updates, skeleton loaders and toasts
 * Single admin login with rate limiting
+* File transfer tool: share a private link, then chat live with whoever opens it and swap files of any type both ways
+* Each chat shows the visitor's IP, location and device, with read receipts, typing and online status
+* Files upload in 3 MB parts with progress, speed and time left, retrying any part that fails, up to 2 GB per file
+* Files and messages are encrypted in the database, and a chat with everything in it is deleted 3 days after it starts
+* New chats, messages and files raise a toast and desktop alert in the app, and an email when you are away
 
 ## Run locally
 

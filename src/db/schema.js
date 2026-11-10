@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const now = sql`(CURRENT_TIMESTAMP)`;
 
@@ -111,4 +111,74 @@ export const loginAttempts = sqliteTable(
     attemptedAt: integer("attempted_at").notNull(),
   },
   (table) => [index("login_attempts_ip_idx").on(table.ip, table.attemptedAt)],
+);
+
+export const transferLink = sqliteTable("transfer_link", {
+  id: integer("id").primaryKey(),
+  key: text("key").notNull(),
+  rotatedAt: integer("rotated_at").notNull(),
+});
+
+export const transferChats = sqliteTable(
+  "transfer_chats",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    ip: text("ip"),
+    location: text("location"),
+    userAgent: text("user_agent"),
+    blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+    createdAt: integer("created_at").notNull(),
+    activeAt: integer("active_at").notNull(),
+    guestSeenAt: integer("guest_seen_at"),
+    adminSeenAt: integer("admin_seen_at"),
+    guestTypingAt: integer("guest_typing_at"),
+    adminTypingAt: integer("admin_typing_at"),
+    guestReadId: integer("guest_read_id").notNull().default(0),
+    adminReadId: integer("admin_read_id").notNull().default(0),
+    notifiedAt: integer("notified_at"),
+  },
+  (table) => [index("transfer_chats_active_idx").on(table.activeAt), index("transfer_chats_ip_idx").on(table.ip, table.createdAt)],
+);
+
+export const transferFiles = sqliteTable(
+  "transfer_files",
+  {
+    id: text("id").primaryKey(),
+    chatId: text("chat_id").notNull(),
+    sender: text("sender").notNull(),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    size: integer("size").notNull(),
+    chunkSize: integer("chunk_size").notNull(),
+    chunkCount: integer("chunk_count").notNull(),
+    status: text("status").notNull().default("uploading"),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [index("transfer_files_chat_idx").on(table.chatId), index("transfer_files_expires_idx").on(table.expiresAt)],
+);
+
+export const transferChunks = sqliteTable(
+  "transfer_chunks",
+  {
+    fileId: text("file_id").notNull(),
+    index: integer("idx").notNull(),
+    data: blob("data", { mode: "buffer" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.fileId, table.index] })],
+);
+
+export const transferMessages = sqliteTable(
+  "transfer_messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    chatId: text("chat_id").notNull(),
+    sender: text("sender").notNull(),
+    body: text("body"),
+    fileId: text("file_id"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("transfer_messages_chat_idx").on(table.chatId, table.id)],
 );

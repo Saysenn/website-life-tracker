@@ -1,5 +1,12 @@
 export const TOOLS = [
   {
+    slug: "file-transfer",
+    title: "File transfer",
+    summary: "Share a private link, then chat live and swap files of any type. Encrypted, and cleared after 3 days.",
+    icon: "transfer",
+    tags: ["Live chat", "Any file", "Encrypted"],
+  },
+  {
     slug: "pdf-editor",
     title: "PDF editor",
     summary: "Change existing text and fonts, add text, images and signatures, whiteout or highlight, and rearrange pages.",

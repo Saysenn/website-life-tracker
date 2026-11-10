@@ -85,6 +85,13 @@
       "when": 1793033057166,
       "tag": "0011_rdp_server",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794318376038,
+      "tag": "0012_file_transfer",
+      "breakpoints": true
     }
   ]
 }
