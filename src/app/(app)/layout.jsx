@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { AppShell } from "@/components/shell/app-shell";
 import { FilesShell } from "@/components/shell/files-shell";
 import { getCompanies, getGroups, getPricing, getStatusRules, getToday } from "@/lib/data";
@@ -17,6 +18,7 @@ export default async function AppLayout({ children }) {
     getPricing(),
   ]);
   const today = getToday();
+  const sidebarCollapsed = (await cookies()).get("sidebar")?.value === "collapsed";
 
   const alerts = companies
     .flatMap((company) =>
@@ -49,6 +51,7 @@ export default async function AppLayout({ children }) {
       panels={buildGroupPanels(companies, groups, pricing, rules, today)}
       today={today}
       currency={pricing.currency}
+      initialCollapsed={sidebarCollapsed}
     >
       {children}
     </AppShell>
