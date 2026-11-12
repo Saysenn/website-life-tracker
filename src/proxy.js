@@ -8,6 +8,8 @@ const FILES_HOME = "/tools/file-transfer";
 /** Pages the file transfer account may open. */
 const FILES_PAGES = new Set([FILES_HOME, "/tools/metadata-cleaner"]);
 const FILES_LOGIN = "/files";
+/** Open from any device even with the device lock on. */
+const OPEN_PAGES = new Set(["/", "/login"]);
 const DEVICE_COOKIE = "lt_device";
 const DEVICE_MAX_AGE = 400 * 24 * 60 * 60;
 
@@ -60,12 +62,18 @@ const guarded = auth(async (request) => {
     const allowed = FILES_PAGES.has(pathname) || pathname.startsWith("/api/transfer/");
     return allowed ? NextResponse.next() : NextResponse.redirect(new URL(FILES_HOME, request.nextUrl));
   }
-  const unlocked = !expected || request.cookies.get(DEVICE_COOKIE)?.value === expected;
   if (pathname === FILES_LOGIN) {
-    return role && unlocked ? NextResponse.redirect(new URL("/", request.nextUrl)) : NextResponse.next();
+    return role ? NextResponse.redirect(new URL("/", request.nextUrl)) : NextResponse.next();
   }
 
-  // Everything else, the admin login included, only answers on an unlocked device.
+  // The home page, the admin login and a signed in admin work from any device.
+  // Anything else only answers on an unlocked device.
+  const unlocked =
+    !expected ||
+    request.cookies.get(DEVICE_COOKIE)?.value === expected ||
+    Boolean(request.auth) ||
+    OPEN_PAGES.has(pathname) ||
+    pathname.startsWith("/api/auth/");
   if (!unlocked) return notFound();
 
   if (SELF_GUARDED.some((pattern) => pattern.test(pathname))) return NextResponse.next();

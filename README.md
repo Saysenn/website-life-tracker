@@ -151,13 +151,13 @@ Project, then Logs, then attempt the sign in again. The entry that appears names
 
 ## Lock the site to your devices
 
-Set `DEVICE_KEY` on Vercel (`openssl rand -hex 24`) and redeploy. From then on every page, the login included, answers 404 to any browser that has not been unlocked. File transfer guest links and the cron keep working.
+Set `DEVICE_KEY` on Vercel (`openssl rand -hex 24`) and redeploy. From then on any page other than the home page and `/login` answers 404 to a browser that has not been unlocked and is not signed in. Once you sign in at `/login`, the whole site works from that device. File transfer guest links and the cron keep working.
 
 To unlock a device, open `https://your-app.vercel.app/unlock/<DEVICE_KEY>` in it once. It stays unlocked for 400 days, or until its cookies are cleared, then open the same link again. To lock every device out, change `DEVICE_KEY` and redeploy, then unlock the ones you still use.
 
 ## File transfer only login
 
-Set `FILES_USERNAME` and `FILES_PASSWORD` on Vercel and redeploy. They sign in at `/files`, which works from any device even with the device lock on, and only accepts this account. It opens File transfer and nothing else: no sidebar, no companies, no settings, and every other page or action is refused. The admin login at `/login` stays locked to your unlocked devices.
+Set `FILES_USERNAME` and `FILES_PASSWORD` on Vercel and redeploy. They sign in at `/files`, which works from any device even with the device lock on, and only accepts this account. It opens File transfer and nothing else: no sidebar, no companies, no settings, and every other page or action is refused.
 
 ## Connect an AI assistant
 
