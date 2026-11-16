@@ -177,6 +177,7 @@ function UploadCard({ item, onCancel, onRetry }) {
             </p>
             <p className="text-xs text-ink-3 tabular-nums">
               {item.status === "queued" && `Waiting · ${formatBytes(item.size)}`}
+              {item.status === "cleaning" && "Removing metadata…"}
               {item.status === "uploading" &&
                 `${formatBytes(item.loaded)} of ${formatBytes(item.size)}${item.speed ? ` · ${formatBytes(item.speed)}/s · ${duration(item.eta)} left` : ""}`}
               {item.status === "done" && <span className="text-success">Sent</span>}

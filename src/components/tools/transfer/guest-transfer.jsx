@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Lock, MessageSquare, ShieldCheck, Timer, X } from "lucide-react";
+import { ArrowRight, Eraser, Lock, MessageSquare, ShieldCheck, Timer, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,10 @@ function Promises({ className, autoDelete = true }) {
       <span className="inline-flex items-center gap-1.5">
         <ShieldCheck className="size-[1.3rem] text-success" />
         Encrypted in storage
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <Eraser className="size-[1.3rem]" />
+        Location and other metadata removed
       </span>
       {autoDelete && (
         <span className="inline-flex items-center gap-1.5">

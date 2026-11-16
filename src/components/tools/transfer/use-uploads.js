@@ -1,10 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { scrubFile } from "@/lib/tools/scrub";
 import { uploadFile } from "./api";
 
 const ACTIVE_FILES = 2;
 let counter = 0;
+
+const cancelled = () => Object.assign(new Error("Cancelled"), { aborted: true });
+
+/** Strips metadata once per job, so a retry reuses the cleaned copy. */
+async function prepare(job, signal) {
+  if (!job.cleaned) {
+    job.file = await scrubFile(job.file);
+    job.cleaned = true;
+  }
+  if (signal.aborted) throw cancelled();
+  return job.file;
+}
 
 /**
  * Upload queue. Two files go at once; each tracks bytes sent, speed and time left.
@@ -32,19 +45,23 @@ export function useUploads({ onSent, onError }) {
       const controller = new AbortController();
       controllers.current.set(job.key, controller);
       active.current += 1;
-      const startedAt = performance.now();
-      patch(job.key, { status: "uploading", startedAt });
+      patch(job.key, { status: job.cleaned ? "uploading" : "cleaning" });
 
-      uploadFile({
-        file: job.file,
-        createUrl: job.createUrl,
-        signal: controller.signal,
-        onProgress: (loaded) => {
-          const seconds = (performance.now() - startedAt) / 1000;
-          const speed = seconds > 0.3 ? loaded / seconds : 0;
-          patch(job.key, { loaded, speed, eta: speed ? (job.file.size - loaded) / speed : Infinity });
-        },
-      })
+      prepare(job, controller.signal)
+        .then((file) => {
+          const startedAt = performance.now();
+          patch(job.key, { status: "uploading", startedAt, size: file.size, loaded: 0 });
+          return uploadFile({
+            file,
+            createUrl: job.createUrl,
+            signal: controller.signal,
+            onProgress: (loaded) => {
+              const seconds = (performance.now() - startedAt) / 1000;
+              const speed = seconds > 0.3 ? loaded / seconds : 0;
+              patch(job.key, { loaded, speed, eta: speed ? (file.size - loaded) / speed : Infinity });
+            },
+          });
+        })
         .then((message) => {
           jobs.current.delete(job.key);
           setItems((current) => current.filter((item) => item.key !== job.key));
@@ -113,7 +130,7 @@ export function useUploads({ onSent, onError }) {
   }, []);
 
   useEffect(() => {
-    const busy = items.some((item) => item.status === "uploading" || item.status === "queued");
+    const busy = items.some((item) => ["queued", "cleaning", "uploading"].includes(item.status));
     if (!busy) return;
     const warn = (event) => event.preventDefault();
     window.addEventListener("beforeunload", warn);

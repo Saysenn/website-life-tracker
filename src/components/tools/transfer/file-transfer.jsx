@@ -5,11 +5,14 @@ import {
   Bell,
   Copy,
   Download,
+  Eraser,
   ExternalLink,
   Globe,
   Lock,
   LockOpen,
+  Maximize2,
   MessageSquare,
+  Minimize2,
   MonitorSmartphone,
   RefreshCw,
   ShieldCheck,
@@ -228,6 +231,12 @@ function LinkCard({ linkKey, onRotate, stats, autoDelete, onAutoDelete }) {
           <ShieldCheck className="size-[1.3rem] text-success" />
           Encrypted at rest
         </span>
+        <Tooltip label="GPS, camera, author and dates are stripped from every file on upload and again on download">
+          <span className="inline-flex items-center gap-1.5">
+            <Eraser className="size-[1.3rem] text-success" />
+            Metadata removed
+          </span>
+        </Tooltip>
         <AutoDelete value={autoDelete} onChange={onAutoDelete} />
         <span className="tabular-nums">
           {plural(stats.chats, "chat")} · {plural(stats.files, "file")} ·{" "}
@@ -366,6 +375,8 @@ function ChatHeader({
   onBack,
   onToggleBlock,
   onDelete,
+  expanded,
+  onToggleExpand,
 }) {
   const now = useNow();
   const info = chat ?? summary;
@@ -434,6 +445,17 @@ function ChatHeader({
           count={readyCount(files)}
           className="hidden sm:inline-flex"
         />
+        <Tooltip label={expanded ? "Exit full screen (Esc)" : "Full screen"}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleExpand}
+            aria-label={expanded ? "Exit full screen" : "Full screen"}
+            aria-pressed={expanded}
+          >
+            {expanded ? <Minimize2 /> : <Maximize2 />}
+          </Button>
+        </Tooltip>
         <Tooltip label={info.blocked ? "Reopen chat" : "Close chat"}>
           <Button
             variant="ghost"
@@ -554,6 +576,7 @@ export function FileTransfer({
   const [selected, setSelected] = useState(initialChat || null);
   const [data, setData] = useState({ chats: null, files: null });
   const [confirm, setConfirm] = useState(null);
+  const [expanded, setExpanded] = useState(false);
   const seen = useRef(null);
   const selectedRef = useRef(selected);
   const timer = useRef(null);
@@ -641,6 +664,23 @@ export function FileTransfer({
   );
 
   const summary = data.chats?.find((chat) => chat.id === selected) ?? null;
+  const fullscreen = expanded && Boolean(selected) && tab === "chats";
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (event) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector("[role='dialog']")) return;
+      setExpanded(false);
+    };
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [fullscreen]);
 
   const select = (id) => {
     setSelected(id);
@@ -675,7 +715,10 @@ export function FileTransfer({
         await call(`/api/transfer/admin/chats/${target.item.id}`, {
           method: "DELETE",
         });
-        if (selected === target.item.id) setSelected(null);
+        if (selected === target.item.id) {
+          setExpanded(false);
+          setSelected(null);
+        }
         toast.success("Chat deleted");
       } else {
         await call(`/api/transfer/files/${target.item.id}`, {
@@ -730,11 +773,19 @@ export function FileTransfer({
           onDelete={(file) => setConfirm({ kind: "file", item: file })}
         />
       ) : (
-        <div className="mt-4 grid h-[calc(100dvh-14rem)] min-h-[52rem] overflow-hidden rounded-2xl bg-surface shadow-card lg:h-[calc(100dvh-30rem)] lg:grid-cols-[30rem_1fr]">
+        <div
+          className={cn(
+            "grid overflow-hidden bg-surface",
+            fullscreen
+              ? "fixed inset-0 z-30 h-dvh"
+              : "mt-4 h-[calc(100dvh-14rem)] min-h-[52rem] rounded-2xl shadow-card lg:h-[calc(100dvh-30rem)] lg:grid-cols-[30rem_1fr]",
+          )}
+        >
           <div
             className={cn(
               "min-h-0 overflow-y-auto border-grid lg:block lg:border-r",
-              selected && "hidden",
+              (selected || fullscreen) && "hidden",
+              fullscreen && "lg:hidden",
             )}
           >
             <ChatList
@@ -771,7 +822,12 @@ export function FileTransfer({
                     peer={peer}
                     files={files}
                     summary={summary}
-                    onBack={() => setSelected(null)}
+                    onBack={() => {
+                      setExpanded(false);
+                      setSelected(null);
+                    }}
+                    expanded={fullscreen}
+                    onToggleExpand={() => setExpanded((value) => !value)}
                     onToggleBlock={() => toggleBlock(chat ?? summary)}
                     onDelete={() =>
                       setConfirm({ kind: "chat", item: chat ?? summary })
@@ -788,7 +844,10 @@ export function FileTransfer({
                       variant="soft"
                       size="sm"
                       className="mt-3"
-                      onClick={() => setSelected(null)}
+                      onClick={() => {
+                        setExpanded(false);
+                        setSelected(null);
+                      }}
                     >
                       Back to chats
                     </Button>

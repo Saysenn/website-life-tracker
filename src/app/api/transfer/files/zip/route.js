@@ -1,6 +1,7 @@
 import { Zip, ZipPassThrough } from "fflate";
 import { HttpError, guestChat, isAdminRequest, route } from "@/lib/transfer/access";
-import { fileStream, getChat, readyFiles } from "@/lib/transfer/store";
+import { scrubbedFile } from "@/lib/transfer/scrub";
+import { getChat, readyFiles } from "@/lib/transfer/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -24,7 +25,10 @@ function uniquePaths(files, folders) {
   });
 }
 
-/** Streams a stored (uncompressed) zip, reading one encrypted chunk at a time. */
+/**
+ * Streams a stored (uncompressed) zip. Files that can be cleaned of metadata are
+ * cleaned in memory first; everything else is read one encrypted chunk at a time.
+ */
 function zipStream(files, paths) {
   let out = [];
   let failed = null;
@@ -38,7 +42,14 @@ function zipStream(files, paths) {
       const entry = new ZipPassThrough(paths[index]);
       entry.mtime = new Date(file.createdAt);
       zip.add(entry);
-      const reader = fileStream(file).getReader();
+      const { body } = await scrubbedFile(file);
+      if (body instanceof Uint8Array) {
+        entry.push(body, true);
+        if (failed) throw failed;
+        if (out.length) yield* out.splice(0);
+        continue;
+      }
+      const reader = body.getReader();
       for (;;) {
         const { value, done } = await reader.read();
         entry.push(value ?? new Uint8Array(0), done);

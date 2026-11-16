@@ -5,10 +5,10 @@ import { HttpError } from "./access";
 import { HOST_NAME, INLINE_TYPES, MAX_AGENT_MESSAGE } from "./constants";
 import { sameText } from "./crypto";
 import { notifyAdmin } from "./notify";
+import { scrubbedFile } from "./scrub";
 import {
   agentChat,
   deleteChat,
-  fileStream,
   getChat,
   getFile,
   getLinkKey,
@@ -266,8 +266,10 @@ export const TOOLS = [
       const file = await getFile(file_id);
       if (file.status !== "ready") throw new HttpError(409, "That file is still uploading.");
       if (file.size > READ_LIMIT) throw new HttpError(413, `${file.name} is too large to read here (over 3 MB).`);
+      const { body } = await scrubbedFile(file);
       const parts = [];
-      for await (const part of fileStream(file)) parts.push(part);
+      if (body instanceof Uint8Array) parts.push(body);
+      else for await (const part of body) parts.push(part);
       const data = Buffer.concat(parts);
       if (INLINE_TYPES.includes(file.type)) return { content: [{ type: "image", data: data.toString("base64"), mimeType: file.type }] };
       if (/^text\/|json|xml|csv|javascript/.test(file.type)) return { content: [{ type: "text", text: data.toString("utf8") }] };

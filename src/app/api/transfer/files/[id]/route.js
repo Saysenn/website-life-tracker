@@ -3,7 +3,8 @@ import { route } from "@/lib/transfer/access";
 import { INLINE_TYPES } from "@/lib/transfer/constants";
 import { notifyAdmin } from "@/lib/transfer/notify";
 import { canDelete, canRead, canUpload } from "@/lib/transfer/permissions";
-import { completeFile, deleteFile, fileStream, getFile } from "@/lib/transfer/store";
+import { scrubbedFile } from "@/lib/transfer/scrub";
+import { completeFile, deleteFile, getFile } from "@/lib/transfer/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -17,10 +18,11 @@ export const GET = route(async (request, { params }) => {
   const file = await getFile((await params).id);
   await canRead(file);
   const inline = request.nextUrl.searchParams.get("inline") === "1" && INLINE_TYPES.includes(file.type);
-  return new Response(fileStream(file), {
+  const { body, size } = await scrubbedFile(file);
+  return new Response(body, {
     headers: {
       "Content-Type": inline ? file.type : "application/octet-stream",
-      "Content-Length": String(file.size),
+      "Content-Length": String(size),
       "Content-Disposition": contentDisposition(inline ? "inline" : "attachment", file.name),
       "Content-Security-Policy": "default-src 'none'; sandbox",
       "Cache-Control": "private, no-store",
