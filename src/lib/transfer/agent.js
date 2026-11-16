@@ -39,9 +39,16 @@ export function agentAccess(request) {
   return token && sameText(token, key) ? "ok" : "denied";
 }
 
-/** No chat_id means the assistant is delivering to the admin, so it goes in the Grok chat as incoming. */
+/**
+ * No chat_id means the assistant is delivering to the admin, so it goes in the Grok chat as incoming.
+ * The Grok chat's own id lands there too: whatever the assistant writes in its own chat is always incoming,
+ * never shown as if the admin wrote it.
+ */
 export async function target(chat_id) {
-  if (chat_id) return { chat: await getChat(chat_id), role: "admin" };
+  if (chat_id) {
+    const chat = await getChat(chat_id);
+    return { chat, role: chat.ip === "agent" ? "guest" : "admin" };
+  }
   const { chat, created } = await agentChat();
   if (created) notifyAdmin({ type: "start", chat });
   return { chat, role: "guest" };
@@ -173,7 +180,7 @@ export const TOOLS = [
   {
     name: "send_message",
     description:
-      "Sends a plain text message, including long responses (up to 200,000 characters, line breaks kept). Without chat_id it goes to the admin in the Grok chat. With a chat_id it answers that visitor as the admin.",
+      "Sends a plain text message, including long responses (up to 200,000 characters, line breaks kept). Without chat_id (or with the Grok chat's own id) it goes to the admin in the Grok chat as incoming. With a visitor's chat_id it answers that visitor as the admin.",
     inputSchema: {
       type: "object",
       properties: {
@@ -196,7 +203,7 @@ export const TOOLS = [
   {
     name: "upload_file",
     description:
-      "Sends a file. Without chat_id it is delivered to the admin in the Grok chat. With a chat_id it goes to that visitor as the admin. Give one of source_url (an https link the server downloads, up to 2 GB), content_text (plain text such as a long response, saved as a .md or .txt file, up to 3 MB) or content_base64 (up to 3 MB) with file_name.",
+      "Sends a file. Without chat_id (or with the Grok chat's own id) it is delivered to the admin in the Grok chat as incoming. With a visitor's chat_id it goes to that visitor as the admin. Give one of source_url (an https link the server downloads, up to 2 GB), content_text (plain text such as a long response, saved as a .md or .txt file, up to 3 MB) or content_base64 (up to 3 MB) with file_name.",
     inputSchema: {
       type: "object",
       properties: {
