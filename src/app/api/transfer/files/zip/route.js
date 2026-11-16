@@ -76,7 +76,12 @@ function zipStream(files, paths) {
   });
 }
 
-/** ?chat=<id> for one chat, ?all=1 for every file (admin only). Guests always get their own chat. */
+const MAX_PICKED = 1000;
+
+/**
+ * ?chat=<id> for one chat, ?all=1 for every file (admin only). Guests always get their own chat.
+ * Add ?ids=a,b,c to zip only those files; ids outside the chat are ignored.
+ */
 export const GET = route(async (request) => {
   const params = request.nextUrl.searchParams;
   let chatId = null;
@@ -88,8 +93,10 @@ export const GET = route(async (request) => {
     chatId = chat.id;
   }
 
-  const files = await readyFiles(chatId);
-  if (!files.length) throw new HttpError(404, "There are no files to download yet.");
+  const picked = params.get("ids");
+  const wanted = picked ? new Set(picked.split(",").filter(Boolean).slice(0, MAX_PICKED)) : null;
+  const files = (await readyFiles(chatId)).filter((file) => !wanted || wanted.has(file.id));
+  if (!files.length) throw new HttpError(404, wanted ? "Those files are no longer available." : "There are no files to download yet.");
   const total = files.reduce((sum, file) => sum + file.size, 0);
   if (total > ZIP_LIMIT) throw new HttpError(413, "That is over 4 GB. Download the files one by one.");
 

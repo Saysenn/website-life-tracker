@@ -14,12 +14,15 @@ import {
   FileText,
   FileVideo,
   Lock,
+  ListChecks,
   Paperclip,
   RotateCw,
+  Search,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { INLINE_TYPES, MAX_MESSAGE, PREVIEW_MAX_BYTES } from "@/lib/transfer/constants";
@@ -28,10 +31,18 @@ import { cn } from "@/lib/utils";
 import { ProgressBar } from "../drop-zone";
 import { call } from "./api";
 import { clock, dayLabel, duration } from "./format";
+import { EMPTY_SEARCH, Highlight, SearchBar, SelectBar, Tick, matches, searchActive, termsOf } from "./thread-tools";
 import { useChat } from "./use-chat";
 import { useUploads } from "./use-uploads";
 
-const ICONS = { image: FileImage, video: FileVideo, audio: FileAudio, archive: FileArchive, doc: FileText, file: File };
+const ICONS = {
+  image: FileImage,
+  video: FileVideo,
+  audio: FileAudio,
+  archive: FileArchive,
+  doc: FileText,
+  file: File,
+};
 
 function kindOf({ name = "", type = "" }) {
   const ext = extensionOf(name);
@@ -46,7 +57,9 @@ function kindOf({ name = "", type = "" }) {
 export function FileGlyph({ file, className }) {
   const Icon = ICONS[kindOf(file)];
   return (
-    <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl bg-sunken text-ink-3", className)}>
+    <span
+      className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl bg-sunken text-ink-3", className)}
+    >
       <Icon className="size-[1.8rem]" strokeWidth={1.5} />
     </span>
   );
@@ -54,10 +67,15 @@ export function FileGlyph({ file, className }) {
 
 const fileUrl = (id, inline) => `/api/transfer/files/${id}${inline ? "?inline=1" : ""}`;
 
-function FileCard({ file, mine }) {
+function FileCard({ file, mine, terms, picking }) {
   if (file.status !== "ready") {
     return (
-      <div className={cn("flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm", mine ? "bg-ink/80 text-ground/70" : "bg-sunken text-ink-3")}>
+      <div
+        className={cn(
+          "flex items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm",
+          mine ? "bg-ink/80 text-ground/70" : "bg-sunken text-ink-3",
+        )}
+      >
         <File className="size-[1.6rem]" strokeWidth={1.5} />
         This file was removed
       </div>
@@ -66,34 +84,47 @@ function FileCard({ file, mine }) {
 
   const preview = INLINE_TYPES.includes(file.type) && file.size <= PREVIEW_MAX_BYTES;
   return (
-    <div className={cn("w-[30rem] max-w-full overflow-hidden rounded-2xl", mine ? "bg-ink text-ground" : "bg-surface shadow-card")}>
+    <div
+      className={cn(
+        "w-[30rem] max-w-full overflow-hidden rounded-2xl",
+        mine ? "bg-ink text-ground" : "bg-surface shadow-card",
+        picking && "pointer-events-none",
+      )}
+    >
       {preview && (
         <a href={fileUrl(file.id, true)} target="_blank" rel="noreferrer" className="block bg-sunken">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={fileUrl(file.id, true)} alt={file.name} loading="lazy" className="max-h-[28rem] w-full object-cover" />
+          <img
+            src={fileUrl(file.id, true)}
+            alt={file.name}
+            loading="lazy"
+            className="max-h-[28rem] w-full object-cover"
+          />
         </a>
       )}
       <div className="flex items-center gap-3 p-2.5">
         <FileGlyph file={file} className={mine ? "bg-ground/10 text-ground/80" : undefined} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium" title={file.name}>
-            {file.name}
+            <Highlight text={file.name} terms={terms} />
           </p>
           <p className={cn("text-xs tabular-nums", mine ? "text-ground/60" : "text-ink-3")}>{formatBytes(file.size)}</p>
         </div>
-        <Tooltip label="Download">
-          <a
-            href={fileUrl(file.id)}
-            download={file.name}
-            aria-label={`Download ${file.name}`}
-            className={cn(
-              "flex size-8.5 shrink-0 items-center justify-center rounded-lg transition-colors",
-              mine ? "bg-ground/12 text-ground hover:bg-ground/22" : "bg-ink text-ground hover:bg-ink/85",
-            )}
-          >
-            <Download className="size-[1.5rem]" />
-          </a>
-        </Tooltip>
+        {!picking && (
+          <Tooltip label="Download">
+            <a
+              href={fileUrl(file.id)}
+              download={file.name}
+              aria-label={`Download ${file.name}`}
+              className={cn(
+                "flex size-8.5 shrink-0 items-center justify-center rounded-lg transition-colors",
+                mine ? "bg-ground/12 text-ground hover:bg-ground/22" : "bg-ink text-ground hover:bg-ink/85",
+              )}
+            >
+              <Download className="size-[1.5rem]" />
+            </a>
+          </Tooltip>
+        )}
       </div>
     </div>
   );
@@ -101,9 +132,11 @@ function FileCard({ file, mine }) {
 
 const LONG_TEXT = 1500;
 
-function TextBubble({ body, mine }) {
-  const [open, setOpen] = useState(false);
+function TextBubble({ body, mine, terms }) {
+  const [opened, setOpen] = useState(false);
   const long = body.length > LONG_TEXT;
+  // A search hit past the cut would be invisible, so show the whole message while searching.
+  const open = opened || Boolean(terms?.length);
   const copy = () =>
     navigator.clipboard.writeText(body).then(
       () => toast.success("Message copied"),
@@ -116,20 +149,28 @@ function TextBubble({ body, mine }) {
         mine ? "rounded-br-md bg-ink text-ground" : "rounded-bl-md bg-surface text-ink shadow-card",
       )}
     >
-      {long && !open ? `${body.slice(0, LONG_TEXT).trimEnd()}…` : body}
+      {long && !open ? `${body.slice(0, LONG_TEXT).trimEnd()}…` : <Highlight text={body} terms={terms} />}
       {long && (
-        <div className={cn("mt-2 flex gap-1.5 border-t pt-2 whitespace-normal", mine ? "border-ground/15" : "border-grid")}>
+        <div
+          className={cn("mt-2 flex gap-1.5 border-t pt-2 whitespace-normal", mine ? "border-ground/15" : "border-grid")}
+        >
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
-            className={cn("rounded-md px-2 py-1 text-xs font-medium transition-colors", mine ? "hover:bg-ground/12" : "hover:bg-hover")}
+            className={cn(
+              "rounded-md px-2 py-1 text-xs font-medium transition-colors",
+              mine ? "hover:bg-ground/12" : "hover:bg-hover",
+            )}
           >
             {open ? "Show less" : `Show all · ${body.length.toLocaleString()} characters`}
           </button>
           <button
             type="button"
             onClick={copy}
-            className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors", mine ? "hover:bg-ground/12" : "hover:bg-hover")}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+              mine ? "hover:bg-ground/12" : "hover:bg-hover",
+            )}
           >
             <Copy className="size-[1.2rem]" />
             Copy
@@ -140,14 +181,63 @@ function TextBubble({ body, mine }) {
   );
 }
 
-function Bubble({ message, mine, status }) {
+function Bubble({ message, mine, status, terms, dim, focused, picking, picked, onPick }) {
   const file = message.file;
+  const pickable = picking && file?.status === "ready";
+  const content = file ? (
+    <FileCard file={file} mine={mine} terms={terms} picking={pickable} />
+  ) : (
+    <TextBubble body={message.body ?? "Message could not be read"} mine={mine} terms={terms} />
+  );
   return (
-    <div className={cn("flex animate-rise flex-col gap-1", mine ? "items-end" : "items-start")}>
-      {file ? (
-        <FileCard file={file} mine={mine} />
+    <div
+      data-message={message.id}
+      className={cn(
+        "flex animate-rise flex-col gap-1 transition-opacity duration-200",
+        mine ? "items-end" : "items-start",
+        (dim || (picking && !pickable)) && "opacity-35",
+      )}
+    >
+      {pickable ? (
+        <div
+          role="checkbox"
+          aria-checked={picked}
+          aria-label={`Select ${file.name}`}
+          tabIndex={0}
+          onClick={(event) => onPick(message.file.id, event.shiftKey)}
+          onKeyDown={(event) => {
+            if (event.key === " " || event.key === "Enter") {
+              event.preventDefault();
+              onPick(message.file.id, event.shiftKey);
+            }
+          }}
+          className={cn(
+            "flex max-w-full cursor-pointer items-center gap-2.5 rounded-2xl outline-none select-none focus-visible:ring-2 focus-visible:ring-data",
+            mine && "flex-row-reverse",
+          )}
+        >
+          <Tick on={picked} />
+          <div
+            className={cn(
+              "max-w-full rounded-2xl transition-[box-shadow,transform] duration-150",
+              picked
+                ? "scale-[0.98] ring-2 ring-data ring-offset-2 ring-offset-ground"
+                : "hover:ring-2 hover:ring-grid",
+            )}
+          >
+            {content}
+          </div>
+        </div>
       ) : (
-        <TextBubble body={message.body ?? "Message could not be read"} mine={mine} />
+        <div
+          className={cn(
+            "flex w-full [&>*]:transition-shadow [&>*]:duration-300",
+            mine ? "justify-end" : "justify-start",
+            focused && "[&>*]:ring-2 [&>*]:ring-warning [&>*]:ring-offset-2 [&>*]:ring-offset-ground",
+          )}
+        >
+          {content}
+        </div>
       )}
       <span className="flex items-center gap-1 px-1 text-2xs text-ink-4 tabular-nums">
         {clock(message.createdAt)}
@@ -211,7 +301,9 @@ function UploadCard({ item, onCancel, onRetry }) {
         </div>
         <div className="mt-2.5 flex items-center gap-2.5">
           <ProgressBar value={progress} tone={tone} className="flex-1" />
-          <span className="w-9 text-right text-2xs font-semibold text-ink-2 tabular-nums">{Math.floor(progress * 100)}%</span>
+          <span className="w-9 text-right text-2xs font-semibold text-ink-2 tabular-nums">
+            {Math.floor(progress * 100)}%
+          </span>
         </div>
       </div>
     </div>
@@ -243,7 +335,11 @@ function Typing({ name }) {
     <div className="flex items-center gap-2 px-1 text-xs text-ink-3 animate-fade">
       <span className="flex gap-0.5 rounded-full bg-surface px-2.5 py-2 shadow-card">
         {[0, 1, 2].map((dot) => (
-          <span key={dot} className="size-1 animate-bounce rounded-full bg-ink-3" style={{ animationDelay: `${dot * 120}ms` }} />
+          <span
+            key={dot}
+            className="size-1 animate-bounce rounded-full bg-ink-3"
+            style={{ animationDelay: `${dot * 120}ms` }}
+          />
         ))}
       </span>
       {name} is typing
@@ -350,6 +446,42 @@ function Composer({ disabled, disabledNote, onSend, onFiles, onTyping }) {
   );
 }
 
+const ZIP_LIMIT = 4 * 1024 ** 3 - 64 * 1024 ** 2;
+
+/** Search and select buttons, placed in each page's own header. */
+function ThreadButtons({ searching, picking, canPick, onSearch, onPick }) {
+  return (
+    <>
+      <Tooltip label={searching ? "Close search" : "Search this chat (Ctrl+F)"}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onSearch}
+          aria-label="Search this chat"
+          aria-pressed={searching}
+          className={cn(searching && "bg-hover text-ink")}
+        >
+          <Search />
+        </Button>
+      </Tooltip>
+      {canPick && (
+        <Tooltip label={picking ? "Stop selecting" : "Select files to download"}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onPick}
+            aria-label="Select files"
+            aria-pressed={picking}
+            className={cn(picking && "bg-hover text-ink")}
+          >
+            <ListChecks />
+          </Button>
+        </Tooltip>
+      )}
+    </>
+  );
+}
+
 /**
  * The conversation itself, shared by the admin page and the guest page.
  * `role` is who is looking: "admin" or "guest".
@@ -359,6 +491,7 @@ export function Thread({
   syncUrl,
   messagesUrl,
   filesUrl,
+  zipUrl,
   peerName,
   renderHeader,
   renderEnded,
@@ -376,6 +509,128 @@ export function Thread({
   const [dragging, setDragging] = useState(false);
   const seeded = useRef(false);
   const { add } = uploads;
+
+  // Search: null while closed.
+  const [search, setSearch] = useState(null);
+  const [jumpedTo, setJumpedTo] = useState(null);
+  const [listOpen, setListOpen] = useState(false);
+  const searchBox = useRef(null);
+  // Picking files to download together: null while off.
+  const [picked, setPicked] = useState(null);
+  const anchor = useRef(null);
+
+  const terms = useMemo(() => termsOf(search?.query ?? ""), [search?.query]);
+  const active = searchActive(search, terms);
+  const results = useMemo(
+    () => (active ? chat.messages.filter((message) => matches(message, search, terms, role)) : []),
+    [active, chat.messages, search, terms, role],
+  );
+  const resultIds = useMemo(() => new Set(results.map((message) => message.id)), [results]);
+  const currentId = resultIds.has(jumpedTo) ? jumpedTo : (results.at(-1)?.id ?? null);
+
+  // Files that can be downloaded right now, oldest first.
+  const allReady = useMemo(
+    () =>
+      chat.messages
+        .filter((message) => message.file && chat.files[message.file.id] === "ready")
+        .map((message) => message.file),
+    [chat.messages, chat.files],
+  );
+  // "Select all" and shift-click ranges stick to search hits while searching.
+  const readyFiles = useMemo(
+    () => (active ? allReady.filter((file) => results.some((message) => message.file?.id === file.id)) : allReady),
+    [active, allReady, results],
+  );
+
+  useEffect(() => {
+    if (!active || currentId == null) return;
+    const node = scroller.current?.querySelector(`[data-message="${currentId}"]`);
+    if (!node) return;
+    pinned.current = false;
+    node.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [active, currentId]);
+
+  const openSearch = () => {
+    setSearch((current) => current ?? EMPTY_SEARCH);
+    searchBox.current?.querySelector("input")?.focus();
+  };
+  const closeSearch = () => {
+    setSearch(null);
+    setJumpedTo(null);
+    setListOpen(false);
+  };
+  const changeSearch = (next) => {
+    setSearch(next);
+    setJumpedTo(null);
+  };
+
+  const togglePicking = () => setPicked((current) => (current ? null : new Set()));
+  const pick = (id, range) => {
+    setPicked((current) => {
+      const next = new Set(current);
+      const order = readyFiles.map((file) => file.id);
+      const from = order.indexOf(anchor.current);
+      const to = order.indexOf(id);
+      if (range && from !== -1 && to !== -1) {
+        const turnOn = !current.has(id);
+        order
+          .slice(Math.min(from, to), Math.max(from, to) + 1)
+          .forEach((each) => (turnOn ? next.add(each) : next.delete(each)));
+      } else if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    anchor.current = id;
+  };
+
+  const pickedFiles = picked ? allReady.filter((file) => picked.has(file.id)) : [];
+  const pickedBytes = pickedFiles.reduce((sum, file) => sum + file.size, 0);
+  const downloadPicked = () => {
+    if (!pickedFiles.length) return;
+    if (pickedBytes > ZIP_LIMIT && pickedFiles.length > 1) {
+      toast.error("That is over 4 GB", {
+        description: "Pick fewer files, or download the big ones one by one.",
+      });
+      return;
+    }
+    const single = pickedFiles.length === 1;
+    const link = document.createElement("a");
+    link.href = single
+      ? fileUrl(pickedFiles[0].id)
+      : `${zipUrl}${zipUrl.includes("?") ? "&" : "?"}ids=${pickedFiles.map((file) => file.id).join(",")}`;
+    link.download = single ? pickedFiles[0].name : "";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    toast.success(single ? `Downloading ${pickedFiles[0].name}` : `Downloading ${pickedFiles.length} files as a zip`, {
+      description: formatBytes(pickedBytes),
+    });
+    setPicked(null);
+  };
+
+  // Ctrl/Cmd+F searches the chat, Esc backs out of picking.
+  const keys = useRef({});
+  useEffect(() => {
+    keys.current = {
+      openSearch,
+      picking: Boolean(picked),
+      stopPicking: () => setPicked(null),
+    };
+  });
+  useEffect(() => {
+    const onKey = (event) => {
+      if (document.querySelector("[role='dialog']")) return;
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        keys.current.openSearch();
+      } else if (event.key === "Escape" && keys.current.picking && !event.defaultPrevented) {
+        event.preventDefault();
+        keys.current.stopPicking();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (seeded.current || !initialFiles?.length) return;
@@ -424,7 +679,42 @@ export function Thread({
         sendFiles(event.dataTransfer.files);
       }}
     >
-      {renderHeader?.({ chat: chat.chat, peer: chat.peer, files: chat.files })}
+      {renderHeader?.({
+        chat: chat.chat,
+        peer: chat.peer,
+        files: chat.files,
+        tools: (
+          <ThreadButtons
+            searching={Boolean(search)}
+            picking={Boolean(picked)}
+            canPick={allReady.length > 0}
+            onSearch={() => (search ? closeSearch() : openSearch())}
+            onPick={togglePicking}
+          />
+        ),
+      })}
+
+      {search && (
+        <div ref={searchBox}>
+          <SearchBar
+            search={search}
+            onChange={changeSearch}
+            onClose={closeSearch}
+            results={results}
+            currentId={currentId}
+            onJump={(id, fromList) => {
+              setJumpedTo(id);
+              if (fromList && window.matchMedia("(max-width: 640px)").matches) setListOpen(false);
+            }}
+            listOpen={listOpen}
+            onToggleList={() => setListOpen((value) => !value)}
+            role={role}
+            peerName={peerName}
+            terms={terms}
+            active={active}
+          />
+        </div>
+      )}
 
       <div
         ref={scroller}
@@ -445,15 +735,32 @@ export function Thread({
               const previous = chat.messages[index - 1];
               const newDay = !previous || dayLabel(previous.createdAt) !== dayLabel(message.createdAt);
               const mine = message.sender === role;
-              const status =
-                message.id === lastMine?.id ? (chat.peer?.readId >= message.id ? "seen" : "sent") : null;
-              const live = message.file ? { ...message, file: { ...message.file, status: chat.files[message.file.id] ?? "removed" } } : message;
+              const status = message.id === lastMine?.id ? (chat.peer?.readId >= message.id ? "seen" : "sent") : null;
+              const live = message.file
+                ? {
+                    ...message,
+                    file: {
+                      ...message.file,
+                      status: chat.files[message.file.id] ?? "removed",
+                    },
+                  }
+                : message;
               return (
                 <Fragment key={message.id}>
                   {newDay && (
                     <p className="my-1 text-center text-2xs font-medium text-ink-4">{dayLabel(message.createdAt)}</p>
                   )}
-                  <Bubble message={live} mine={mine} status={status} />
+                  <Bubble
+                    message={live}
+                    mine={mine}
+                    status={status}
+                    terms={active && resultIds.has(message.id) ? terms : null}
+                    dim={active && !resultIds.has(message.id)}
+                    focused={active && message.id === currentId}
+                    picking={Boolean(picked)}
+                    picked={Boolean(picked?.has(message.file?.id))}
+                    onPick={pick}
+                  />
                 </Fragment>
               );
             })}
@@ -469,15 +776,33 @@ export function Thread({
       </div>
 
       <div className="shrink-0 px-3 pt-1 pb-3 sm:px-5 sm:pb-4">
-        <Composer
-          disabled={!canSend}
-          disabledNote="This chat was closed. You can still download what was shared."
-          onSend={sendText}
-          onFiles={sendFiles}
-          onTyping={chat.markTyping}
-        />
+        {picked ? (
+          <SelectBar
+            picked={pickedFiles.length}
+            bytes={pickedBytes}
+            total={readyFiles.length}
+            allPicked={readyFiles.length > 0 && readyFiles.every((file) => picked.has(file.id))}
+            matchedOnly={active}
+            onAll={() => setPicked((current) => new Set([...current, ...readyFiles.map((file) => file.id)]))}
+            onNone={() =>
+              setPicked((current) => new Set([...current].filter((id) => !readyFiles.some((file) => file.id === id))))
+            }
+            onDownload={downloadPicked}
+            onClose={() => setPicked(null)}
+          />
+        ) : (
+          <Composer
+            disabled={!canSend}
+            disabledNote="This chat was closed. You can still download what was shared."
+            onSend={sendText}
+            onFiles={sendFiles}
+            onTyping={chat.markTyping}
+          />
+        )}
         {blocked && role === "admin" && (
-          <p className="mt-1.5 text-center text-2xs text-ink-3">Closed. {peerName} can read the chat but can no longer send anything.</p>
+          <p className="mt-1.5 text-center text-2xs text-ink-3">
+            Closed. {peerName} can read the chat but can no longer send anything.
+          </p>
         )}
       </div>
 

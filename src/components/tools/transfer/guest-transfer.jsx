@@ -143,7 +143,7 @@ function Start({ linkKey, autoDelete, onStarted }) {
   );
 }
 
-function GuestHeader({ chat, peer, files }) {
+function GuestHeader({ chat, peer, files, tools }) {
   const now = useNow();
   const status = peer?.typing ? "Typing…" : peer?.online ? "Online now" : peer?.seenAt ? `Seen ${timeAgo(peer.seenAt, now)}` : "Away";
   return (
@@ -170,7 +170,11 @@ function GuestHeader({ chat, peer, files }) {
           Deletes in {countdown(chat.expiresAt - now)}
         </span>
       )}
-      <DownloadAll href="/api/transfer/files/zip" count={readyCount(files)} />
+      <div className="flex shrink-0 items-center gap-1">
+        {tools}
+        <DownloadAll href="/api/transfer/files/zip" count={readyCount(files)} compact className="sm:hidden" />
+        <DownloadAll href="/api/transfer/files/zip" count={readyCount(files)} className="hidden sm:inline-flex" />
+      </div>
     </div>
   );
 }
@@ -215,6 +219,7 @@ export function GuestTransfer({ linkKey, autoDelete = true, started: startedBefo
             syncUrl="/api/transfer/guest/sync"
             messagesUrl="/api/transfer/guest/messages"
             filesUrl="/api/transfer/guest/files"
+            zipUrl="/api/transfer/files/zip"
             peerName={HOST_NAME}
             initialFiles={initialFiles}
             onPeerMessages={(messages) => {

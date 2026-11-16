@@ -371,6 +371,7 @@ function ChatHeader({
   chat,
   peer,
   files,
+  tools,
   summary,
   onBack,
   onToggleBlock,
@@ -433,7 +434,8 @@ function ChatHeader({
           </Detail>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+        {tools}
         <DownloadAll
           href={`/api/transfer/files/zip?chat=${info.id}`}
           count={readyCount(files)}
@@ -807,6 +809,7 @@ export function FileTransfer({
                 syncUrl={`/api/transfer/admin/chats/${selected}/sync`}
                 messagesUrl={`/api/transfer/admin/chats/${selected}/messages`}
                 filesUrl={`/api/transfer/admin/chats/${selected}/files`}
+                zipUrl={`/api/transfer/files/zip?chat=${selected}`}
                 peerName={summary?.name ?? "They"}
                 onPeerMessages={(messages) => {
                   if (!document.hidden) return;
@@ -816,11 +819,12 @@ export function FileTransfer({
                     previewOf(messages.at(-1)),
                   );
                 }}
-                renderHeader={({ chat, peer, files }) => (
+                renderHeader={({ chat, peer, files, tools }) => (
                   <ChatHeader
                     chat={chat}
                     peer={peer}
                     files={files}
+                    tools={tools}
                     summary={summary}
                     onBack={() => {
                       setExpanded(false);
