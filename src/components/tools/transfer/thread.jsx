@@ -7,6 +7,7 @@ import {
   CloudUpload,
   Copy,
   Download,
+  Ellipsis,
   File,
   FileArchive,
   FileAudio,
@@ -18,11 +19,13 @@ import {
   Paperclip,
   RotateCw,
   Search,
+  Undo2,
   X,
 } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Menu, MenuItem } from "@/components/ui/menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { INLINE_TYPES, MAX_MESSAGE, PREVIEW_MAX_BYTES } from "@/lib/transfer/constants";
@@ -181,7 +184,42 @@ function TextBubble({ body, mine, terms }) {
   );
 }
 
-function Bubble({ message, mine, status, terms, dim, focused, picking, picked, onPick }) {
+/** The ⋯ menu beside your own messages. Shows on hover, always on touch screens. */
+function MessageMenu({ message, onUnsend }) {
+  const copy = () =>
+    navigator.clipboard.writeText(message.body).then(
+      () => toast.success("Message copied"),
+      () => toast.error("Could not copy"),
+    );
+  return (
+    <Menu
+      label="More"
+      trigger={
+        <button
+          type="button"
+          data-menu=""
+          aria-label="Message options"
+          className="flex size-7 shrink-0 items-center justify-center self-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 group-hover:opacity-100 hover:bg-hover hover:text-ink focus-visible:opacity-100 aria-expanded:bg-hover aria-expanded:text-ink aria-expanded:opacity-100 [@media(hover:none)]:opacity-100"
+        >
+          <Ellipsis className="size-[1.5rem]" />
+        </button>
+      }
+    >
+      {message.body && (
+        <MenuItem onSelect={copy}>
+          <Copy />
+          Copy
+        </MenuItem>
+      )}
+      <MenuItem danger onSelect={() => onUnsend(message)}>
+        <Undo2 />
+        Unsend
+      </MenuItem>
+    </Menu>
+  );
+}
+
+function Bubble({ message, mine, status, terms, dim, focused, picking, picked, onPick, onUnsend }) {
   const file = message.file;
   const pickable = picking && file?.status === "ready";
   const content = file ? (
@@ -231,11 +269,13 @@ function Bubble({ message, mine, status, terms, dim, focused, picking, picked, o
       ) : (
         <div
           className={cn(
-            "flex w-full [&>*]:transition-shadow [&>*]:duration-300",
+            "group flex w-full items-start gap-1 [&>*]:transition-shadow [&>*]:duration-300",
             mine ? "justify-end" : "justify-start",
-            focused && "[&>*]:ring-2 [&>*]:ring-warning [&>*]:ring-offset-2 [&>*]:ring-offset-ground",
+            focused &&
+              "[&>:not([data-menu])]:ring-2 [&>:not([data-menu])]:ring-warning [&>:not([data-menu])]:ring-offset-2 [&>:not([data-menu])]:ring-offset-ground",
           )}
         >
+          {onUnsend && <MessageMenu message={message} onUnsend={onUnsend} />}
           {content}
         </div>
       )}
@@ -497,9 +537,10 @@ export function Thread({
   renderEnded,
   initialFiles,
   onPeerMessages,
+  onPeerUnsent,
   empty,
 }) {
-  const chat = useChat(syncUrl, { role, onPeerMessages });
+  const chat = useChat(syncUrl, { role, onPeerMessages, onPeerUnsent });
   const uploads = useUploads({
     onSent: chat.addMessage,
     onError: (error) => toast.error(error.message),
@@ -660,6 +701,18 @@ export function Thread({
     chat.addMessage(message);
   };
 
+  // Gone from the screen at once; put back only if the server refuses.
+  const unsend = async (message) => {
+    const restore = chat.removeMessage(message.id);
+    try {
+      await call(messagesUrl, { method: "DELETE", body: { id: message.id } });
+    } catch (error) {
+      if (error.status === 404) return;
+      restore();
+      toast.error(error.message);
+    }
+  };
+
   const lastMine = chat.messages.findLast((message) => message.sender === role);
 
   return (
@@ -760,6 +813,7 @@ export function Thread({
                     picking={Boolean(picked)}
                     picked={Boolean(picked?.has(message.file?.id))}
                     onPick={pick}
+                    onUnsend={mine && canSend ? unsend : null}
                   />
                 </Fragment>
               );

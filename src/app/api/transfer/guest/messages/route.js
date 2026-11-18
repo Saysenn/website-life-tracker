@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readJson, requireGuest, route } from "@/lib/transfer/access";
 import { notifyAdmin } from "@/lib/transfer/notify";
-import { postMessage } from "@/lib/transfer/store";
+import { postMessage, unsendMessage } from "@/lib/transfer/store";
 
 export const dynamic = "force-dynamic";
 
@@ -11,4 +11,11 @@ export const POST = route(async (request) => {
   const message = await postMessage(chat, "guest", body);
   notifyAdmin({ type: "message", chat });
   return NextResponse.json(message);
+});
+
+export const DELETE = route(async (request) => {
+  const chat = await requireGuest();
+  const { id } = await readJson(request);
+  await unsendMessage(chat, "guest", id);
+  return NextResponse.json({ ok: true });
 });

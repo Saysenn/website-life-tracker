@@ -20,9 +20,18 @@ export function chime() {
   } catch {}
 }
 
+let shown;
+
+/** Closes the last desktop alert, e.g. when the message it showed was unsent. */
+export function clearAlert() {
+  shown?.close();
+  shown = null;
+}
+
 export function desktopAlert(title, body, onClick) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted" || !document.hidden) return;
   const notification = new Notification(title, { body, tag: "file-transfer", icon: "/icon.svg" });
+  shown = notification;
   notification.onclick = () => {
     window.focus();
     onClick?.();

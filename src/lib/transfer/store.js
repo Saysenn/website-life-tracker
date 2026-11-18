@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gt, inArray, lt, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, lt, lte, max, sql, sum } from "drizzle-orm";
 import { db } from "@/db";
 import { transferChats, transferChunks, transferFiles, transferLink, transferMessages } from "@/db/schema";
 import { HttpError } from "./access";
@@ -236,10 +236,22 @@ async function receivedCounts(fileIds) {
  * One polling round. Marks this side as seen (and typing), advances the read
  * cursor when the page is visible, and returns everything after `after`.
  */
-export async function syncChat(chat, role, { after = 0, typing = false, visible = true, touch = true } = {}) {
+export async function syncChat(chat, role, { after = 0, known, typing = false, visible = true, touch = true } = {}) {
   const now = Date.now();
   const on = await autoDeleteOn();
   const cursor = Number.isInteger(after) && after > 0 ? after : 0;
+
+  // Unsent messages leave no marker behind, so a client spots them by count:
+  // when it holds a different number of messages up to its cursor than we do,
+  // send the ids that still exist and it drops the rest.
+  let ids;
+  if (cursor > 0 && Number.isInteger(known)) {
+    const kept = await db
+      .select({ id: transferMessages.id })
+      .from(transferMessages)
+      .where(and(eq(transferMessages.chatId, chat.id), lte(transferMessages.id, cursor)));
+    if (kept.length !== known) ids = kept.map((row) => row.id);
+  }
 
   const messages = await db
     .select()
@@ -269,6 +281,7 @@ export async function syncChat(chat, role, { after = 0, typing = false, visible 
       seenAt: chat[`${peer}SeenAt`],
     },
     messages: messages.map((message) => messageView(message, filesById)),
+    ...(ids && { ids }),
     files: Object.fromEntries(files.map((file) => [file.id, file.status])),
     incoming: incomingFiles.map((file) => fileView(file, received.get(file.id))),
   };
@@ -306,6 +319,37 @@ export async function postMessage(chat, role, body, { max = MAX_MESSAGE } = {}) 
 
   const message = await addMessage(chat, role, { body: sealText(text) });
   return messageView(message, new Map());
+}
+
+/**
+ * Takes back one of your own messages. The row is deleted outright, along with
+ * its file and every part of it, so nothing says a message was ever there. The
+ * chat's last-active time rolls back to whatever is left.
+ */
+export async function unsendMessage(chat, role, id) {
+  assertOpen(chat, role);
+  const messageId = Number(id);
+  if (!Number.isSafeInteger(messageId)) throw new HttpError(400, "Invalid message.");
+  const message = await db.query.transferMessages.findFirst({
+    where: and(
+      eq(transferMessages.id, messageId),
+      eq(transferMessages.chatId, chat.id),
+      eq(transferMessages.sender, role),
+    ),
+  });
+  if (!message) throw new HttpError(404, "That message is already gone.");
+
+  if (message.fileId) await deleteFileRows([message.fileId]);
+  await db.delete(transferMessages).where(eq(transferMessages.id, message.id));
+
+  const [latest] = await db
+    .select({ at: max(transferMessages.createdAt) })
+    .from(transferMessages)
+    .where(eq(transferMessages.chatId, chat.id));
+  await db
+    .update(transferChats)
+    .set({ activeAt: latest?.at ?? chat.createdAt })
+    .where(eq(transferChats.id, chat.id));
 }
 
 /* Files */

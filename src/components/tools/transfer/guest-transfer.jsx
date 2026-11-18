@@ -227,6 +227,7 @@ export function GuestTransfer({ linkKey, autoDelete = true, started: startedBefo
               chime();
               setUnread((count) => count + messages.length);
             }}
+            onPeerUnsent={(messages) => setUnread((count) => Math.max(0, count - messages.length))}
             renderHeader={(state) => <GuestHeader {...state} />}
             renderEnded={(message) => (
               <div className="flex h-full flex-col items-center justify-center p-6 text-center">

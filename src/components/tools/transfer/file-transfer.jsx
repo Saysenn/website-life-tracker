@@ -40,7 +40,7 @@ import { RETENTION_DAYS } from "@/lib/transfer/constants";
 import { formatBytes } from "@/lib/tools/files";
 import { cn, plural } from "@/lib/utils";
 import { ToolHeader } from "../tool-header";
-import { chime, desktopAlert, previewOf } from "./alerts";
+import { chime, clearAlert, desktopAlert, previewOf } from "./alerts";
 import { call } from "./api";
 import { countdown, device, initials, timeAgo, useNow } from "./format";
 import { DownloadAll, readyCount } from "./download-all";
@@ -819,6 +819,7 @@ export function FileTransfer({
                     previewOf(messages.at(-1)),
                   );
                 }}
+                onPeerUnsent={clearAlert}
                 renderHeader={({ chat, peer, files, tools }) => (
                   <ChatHeader
                     chat={chat}
