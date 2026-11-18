@@ -34,4 +34,11 @@ export const TOOLS = [
     icon: "image",
     tags: ["Bulk", "WEBP · PNG · JPG"],
   },
+  {
+    slug: "manhwa-reader",
+    title: "Manhwa reader",
+    summary: "Auto-scroll any manhwa or webtoon site at a speed you set, hands off the mouse. Works as a bookmark or a browser extension.",
+    icon: "reader",
+    tags: ["Auto-scroll", "Any site", "Extension"],
+  },
 ];

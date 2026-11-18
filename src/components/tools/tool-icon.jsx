@@ -1,6 +1,6 @@
-import { ArrowLeftRight, Clapperboard, Eraser, FilePen, ImageUp, Wrench } from "lucide-react";
+import { ArrowLeftRight, BookOpenText, Clapperboard, Eraser, FilePen, ImageUp, Wrench } from "lucide-react";
 
-const ICONS = { transfer: ArrowLeftRight, eraser: Eraser, image: ImageUp, pdf: FilePen, video: Clapperboard };
+const ICONS = { transfer: ArrowLeftRight, eraser: Eraser, image: ImageUp, pdf: FilePen, video: Clapperboard, reader: BookOpenText };
 
 export function ToolIcon({ name, ...props }) {
   const Icon = ICONS[name] ?? Wrench;
