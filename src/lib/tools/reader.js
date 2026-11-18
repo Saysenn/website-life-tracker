@@ -10,7 +10,7 @@ export const SPEED_PRESETS = [
   { label: "Fast", value: 240 },
 ];
 
-export const READER_DEFAULTS = { speed: 60, position: "bottom", autoNext: true, nextDelay: 4, holdPause: true, fade: true };
+export const READER_DEFAULTS = { speed: 60, position: "bottom", autoNext: true, nextBy: "auto", nextDelay: 4, holdPause: true, fade: true };
 
 let sourcePromise;
 

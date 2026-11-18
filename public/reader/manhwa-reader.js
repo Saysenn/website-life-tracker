@@ -53,12 +53,13 @@
     if (source.speed != null) out.speed = clampSpeed(source.speed);
     if (source.position === "top" || source.position === "bottom") out.position = source.position;
     for (const key of ["autoNext", "holdPause", "fade"]) if (typeof source[key] === "boolean") out[key] = source[key];
+    if (source.nextBy === "auto" || source.nextBy === "url") out.nextBy = source.nextBy;
     if (source.nextDelay != null) out.nextDelay = Math.min(30, Math.max(0, Math.round(Number(source.nextDelay) || 0)));
     return out;
   };
 
   let data = {};
-  const settings = { speed: 60, position: "bottom", autoNext: true, nextDelay: 4, holdPause: true, fade: true, ...pick(DEFAULTS) };
+  const settings = { speed: 60, position: "bottom", autoNext: true, nextBy: "auto", nextDelay: 4, holdPause: true, fade: true, ...pick(DEFAULTS) };
 
   let saveTimer = 0;
   const persist = () => {
@@ -72,15 +73,18 @@
 
   /* ---------- finding what scrolls ---------- */
 
-  const rootEl = () => document.scrollingElement || document.documentElement;
+  // The page's window, or the floating window while the chapter floats on top.
+  let win = window;
+  let doc = document;
+  const rootEl = () => doc.scrollingElement || doc.documentElement;
   const scrollable = (value) => value === "auto" || value === "scroll" || value === "overlay";
   let hostEl = null;
 
   function rootCanScroll() {
     const root = rootEl();
-    if (root.scrollHeight - window.innerHeight < 40) return false;
-    const html = getComputedStyle(document.documentElement).overflowY;
-    const body = document.body ? getComputedStyle(document.body).overflowY : "visible";
+    if (root.scrollHeight - win.innerHeight < 40) return false;
+    const html = win.getComputedStyle(doc.documentElement).overflowY;
+    const body = doc.body ? win.getComputedStyle(doc.body).overflowY : "visible";
     return (html !== "visible" ? html : body) !== "hidden";
   }
 
@@ -88,9 +92,9 @@
     if (rootCanScroll()) return rootEl();
     let best = null;
     let bestArea = 0;
-    for (const el of document.querySelectorAll("body *")) {
+    for (const el of doc.querySelectorAll("body *")) {
       if (el === hostEl || el.clientHeight < 160 || el.scrollHeight - el.clientHeight < 40) continue;
-      if (!scrollable(getComputedStyle(el).overflowY)) continue;
+      if (!scrollable(win.getComputedStyle(el).overflowY)) continue;
       const area = el.clientWidth * el.clientHeight;
       if (area > bestArea) {
         best = el;
@@ -103,12 +107,12 @@
   let scroller = null;
   const isRoot = () => scroller === rootEl();
   const position = () => scroller.scrollTop;
-  const viewport = () => (isRoot() ? window.innerHeight : scroller.clientHeight);
+  const viewport = () => (isRoot() ? win.innerHeight : scroller.clientHeight);
   const maxScroll = () => Math.max(0, scroller.scrollHeight - viewport());
   const atEnd = () => position() >= maxScroll() - 2;
 
   function scrollByPx(px) {
-    const target = isRoot() ? window : scroller;
+    const target = isRoot() ? win : scroller;
     try {
       target.scrollBy({ top: px, left: 0, behavior: "instant" });
     } catch {
@@ -118,35 +122,222 @@
 
   /* ---------- next chapter ---------- */
 
-  const NEXT = /\bnext\b|\bnxt\b|siguiente|suivant|weiter|próximo|다음|次|下一|›|»|→|>>/i;
-  const PREV = /\bprev|previous|\bback\b|anterior|précédent|이전|前|上一|‹|«|←|<</i;
+  // Sites link chapters in very different ways, so this tries, in order: the
+  // page's own rel=next, a link to chapter N+1, a Next link or button, a
+  // chapter picker, and finally the same address with the number bumped.
+  const NEXT = /\bnext\b|\bnxt\b|siguiente|suivant|weiter|próximo|proximo|다음|次|下一|›|»|→|>>|chevron-right|arrow-right|angle-right|caret-right/i;
+  const PREV = /\bprev|previous|\bback\b|anterior|précédent|이전|前|上一|‹|«|←|<<|chevron-left|arrow-left|angle-left|caret-left|\bhome\b|\blist\b/i;
+  const CHAPTER = /(chapters?|chap|ch|episodes?|ep|eps|capitulo|cap|issue)([-_./\s]*)(\d+)(?:[.-](\d+))?/gi;
+
+  /** The last chapter-like number in an address, with where it sits. */
+  function chapterOf(href) {
+    let url;
+    try {
+      url = new URL(href, location.href);
+    } catch {
+      return null;
+    }
+    let path;
+    try {
+      path = decodeURIComponent(url.pathname + url.search);
+    } catch {
+      path = url.pathname + url.search;
+    }
+    let last = null;
+    for (const match of path.matchAll(CHAPTER)) last = match;
+    if (!last) return null;
+    const minor = last[4] && last[4].length <= 2 ? Number(`0.${last[4]}`) : 0;
+    return { url, path, match: last, number: Number(last[3]) + minor, prefix: path.slice(0, last.index) };
+  }
+
+  const visible = (el) => el.offsetParent !== null || el.getClientRects().length > 0;
+  const disabled = (el) =>
+    el.disabled || el.getAttribute("aria-disabled") === "true" || /\bdisabled\b/i.test(typeof el.className === "string" ? el.className : "");
+  const labelOf = (el) =>
+    [el.textContent, el.getAttribute("aria-label"), el.title, el.getAttribute("data-tooltip"), typeof el.className === "string" ? el.className : "", el.id]
+      .concat([...el.querySelectorAll("svg, i, span[class], img[alt]")].slice(0, 4).map((icon) => `${icon.getAttribute("class") || ""} ${icon.getAttribute("alt") || ""}`))
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 240);
+
+  const clickTarget = (el, how) => ({ how, el, go: () => el.click() });
 
   function findNext() {
-    const rel = document.querySelector('a[rel~="next"][href], link[rel~="next"][href]');
-    if (rel && rel.href && !rel.href.startsWith("javascript:")) return rel;
+    const own = (el) => !(hostEl && (hostEl === el || hostEl.contains(el)));
     const here = location.href.split("#")[0];
+    const current = chapterOf(location.href);
+
+    const rel = document.querySelector('a[rel~="next"][href], link[rel~="next"][href]');
+    if (rel && rel.href && !rel.href.startsWith("javascript:") && rel.href.split("#")[0] !== here) {
+      return rel.tagName === "LINK" ? { how: "rel", go: () => (location.href = rel.href) } : clickTarget(rel, "rel");
+    }
+
+    if (settings.nextBy === "url") return current ? bumped(current) : null;
+
+    const links = [...document.querySelectorAll("a[href]")].filter(own);
+
+    // A link to the following chapter of the same series.
+    if (current) {
+      let best = null;
+      for (const link of links) {
+        const target = chapterOf(link.href);
+        if (!target || target.url.host !== location.host || target.prefix !== current.prefix) continue;
+        if (target.number <= current.number || target.number >= current.number + 2) continue;
+        if (!best || target.number < best.number || (target.number === best.number && visible(link) && !visible(best.link))) {
+          best = { link, number: target.number };
+        }
+      }
+      if (best) return clickTarget(best.link, "chapter link");
+    }
+
+    // A Next link or button, by its words, label or icon.
     let best = null;
     let bestScore = 0;
-    for (const link of document.querySelectorAll("a[href]")) {
-      if (hostEl && hostEl.contains(link)) continue;
-      const href = link.href || "";
-      if (!href || href.startsWith("javascript:") || href.split("#")[0] === here) continue;
-      const label = [link.textContent, link.getAttribute("aria-label"), link.title, link.className, link.id]
-        .filter((part) => typeof part === "string")
-        .join(" ")
-        .trim()
-        .slice(0, 200);
-      if (!NEXT.test(label) || PREV.test(label)) continue;
+    const clickables = new Set([...links, ...document.querySelectorAll('button, [role="button"], [onclick], [class*="next" i], [id*="next" i]')]);
+    for (const el of clickables) {
+      if (!own(el) || disabled(el)) continue;
+      if (el.tagName === "A") {
+        const href = el.href || "";
+        if (href.split("#")[0] === here && !el.hasAttribute("onclick")) continue;
+      }
+      const label = labelOf(el);
+      if (!label || !NEXT.test(label) || PREV.test(label)) continue;
+      if (el.textContent.trim().length > 60) continue;
       let score = 1;
       if (/chap|ch\.|episode|\bep\b|회|話|章/i.test(label)) score += 3;
-      if (/\bnext\b/i.test(label)) score += 1;
-      if (link.offsetParent !== null) score += 1;
+      if (/\bnext\b/i.test(label)) score += 2;
+      if (/page|slide|carousel|swiper|banner/i.test(label)) score -= 3;
+      if (visible(el)) score += 1;
+      if (el.tagName === "A" || el.tagName === "BUTTON") score += 1;
       if (score > bestScore) {
-        best = link;
+        best = el;
         bestScore = score;
       }
     }
-    return best;
+    if (best && bestScore >= 2) return clickTarget(best, "next button");
+
+    // A chapter picker: choose the option after this chapter.
+    if (current) {
+      for (const select of document.querySelectorAll("select")) {
+        if (!own(select)) continue;
+        const options = [...select.options].map((option) => ({ option, number: Number((option.textContent.match(/\d+(?:\.\d+)?/) || [])[0]) }));
+        if (options.filter((item) => Number.isFinite(item.number)).length < 2) continue;
+        const after = options
+          .filter((item) => item.number > current.number && item.number < current.number + 2)
+          .sort((a, b) => a.number - b.number)[0];
+        if (!after) continue;
+        return {
+          how: "chapter list",
+          go: () => {
+            select.value = after.option.value;
+            select.dispatchEvent(new Event("input", { bubbles: true }));
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            // Some pickers hold the address in the option itself.
+            setTimeout(() => {
+              const value = after.option.value;
+              if (location.href.split("#")[0] === here && /^(https?:)?\/|^[\w-]+\//.test(value)) location.href = new URL(value, location.href).href;
+            }, 1200);
+          },
+        };
+      }
+    }
+
+    // Last resort: the same address with the chapter number bumped by one.
+    return current ? bumped(current) : null;
+  }
+
+  function bumped(current) {
+    const { match, path, url } = current;
+    const next = `${path.slice(0, match.index)}${match[1]}${match[2]}${Math.floor(current.number) + 1}${path.slice(match.index + match[0].length)}`;
+    const [pathname, search = ""] = next.split("?");
+    const target = new URL(url.href);
+    target.pathname = pathname;
+    target.search = search ? `?${search}` : "";
+    target.hash = "";
+    return { how: "guessed address", check: target.href, go: () => (location.href = target.href) };
+  }
+
+  /** Bottom of the last chapter panel, so comments below it don't hold up the next chapter. */
+  let panelsCheckedAt = 0;
+  let lastPanel = null;
+  function pastLastPanel(now) {
+    if (pip || !settings.autoNext) return false;
+    if (now - panelsCheckedAt > 2000) {
+      panelsCheckedAt = now;
+      const images = chapterImages();
+      lastPanel = images.length >= 3 ? images[images.length - 1].el : null;
+    }
+    if (!lastPanel || !lastPanel.isConnected) return false;
+    const rect = lastPanel.getBoundingClientRect();
+    if (rect.height < 50) return false;
+    const bottom = isRoot() ? window.innerHeight : scroller.getBoundingClientRect().bottom;
+    return rect.bottom <= bottom - 8;
+  }
+
+  /* ---------- chapter images, for the floating window ---------- */
+
+  const LAZY_ATTRS = ["data-src", "data-lazy-src", "data-original", "data-url", "data-cfsrc", "data-echo", "data-lazy"];
+
+  function imageSource(img) {
+    for (const name of LAZY_ATTRS) {
+      const value = (img.getAttribute(name) || "").trim();
+      if (!value || value.startsWith("data:")) continue;
+      try {
+        return new URL(value, location.href).href;
+      } catch {
+        /* not a usable address, try the next one */
+      }
+    }
+    const src = img.currentSrc || img.src || "";
+    if (src.startsWith("data:") && img.naturalWidth < 200) return "";
+    return src;
+  }
+
+  /** The chapter's panels in reading order, skipping logos, avatars and ads around them. */
+  function chapterImages() {
+    const minWidth = Math.min(280, window.innerWidth * 0.35);
+    const found = [];
+    for (const img of document.images) {
+      if (img.getBoundingClientRect().width < minWidth || !imageSource(img)) continue;
+      found.push(img);
+    }
+    if (found.length === 0) return [];
+    // The deepest block holding most of the big images is the reader itself.
+    const counts = new Map();
+    for (const img of found) {
+      for (let el = img.parentElement; el && el !== document.documentElement; el = el.parentElement) {
+        const entry = counts.get(el) || { count: 0, el };
+        entry.count += 1;
+        counts.set(el, entry);
+      }
+    }
+    let box = null;
+    let boxDepth = -1;
+    for (const { el, count } of counts.values()) {
+      if (count < found.length * 0.7) continue;
+      let depth = 0;
+      for (let node = el; node; node = node.parentElement) depth += 1;
+      if (depth > boxDepth) {
+        box = el;
+        boxDepth = depth;
+      }
+    }
+    const seen = new Set();
+    return found
+      .filter((img) => !box || box.contains(img))
+      .map((img) => {
+        const src = imageSource(img);
+        const loaded = img.complete && img.naturalWidth > 1 && img.currentSrc === src;
+        return {
+          el: img,
+          src,
+          width: loaded ? img.naturalWidth : Number(img.getAttribute("width")) || 0,
+          height: loaded ? img.naturalHeight : Number(img.getAttribute("height")) || 0,
+        };
+      })
+      .filter((item) => !seen.has(item.src) && seen.add(item.src));
   }
 
   /* ---------- state ---------- */
@@ -166,6 +357,11 @@
   let wakeLock = null;
   let panelOpen = false;
   let hovering = false;
+  let pip = null;
+  let floated = [];
+  let tip = "";
+  let tipTimer = 0;
+  const canFloat = () => "documentPictureInPicture" in window && window.top === window;
 
   /* ---------- toolbar ---------- */
 
@@ -180,6 +376,8 @@
     shrink: icon('<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>'),
     close: icon('<path d="M18 6 6 18M6 6l12 12"/>'),
     next: icon('<path d="m6 17 5-5-5-5M13 17l5-5-5-5"/>'),
+    float: icon('<rect x="2.5" y="4" width="19" height="16" rx="2.5"/><rect x="12" y="11.5" width="7" height="6" rx="1" fill="currentColor"/>'),
+    dock: icon('<rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M15 9l-5 5M10 9.5V14h4.5"/>'),
   };
 
   const CSS = `
@@ -241,7 +439,8 @@
     .controls { display: contents; }
     .hold { position: absolute; left: 50%; transform: translate(-50%, -100%); top: -6px; padding: 3px 9px; border-radius: 999px; background: var(--bg); font-size: 11px; color: var(--dim); opacity: 0; transition: opacity 150ms; pointer-events: none; white-space: nowrap; }
     .wrap.top .hold { top: auto; bottom: -6px; transform: translate(-50%, 100%); }
-    .wrap.held .hold { opacity: 1; }
+    .wrap.tipping .hold { opacity: 1; }
+    .float-btn[hidden] { display: none; }
     .panel { padding: 12px; display: none; flex-direction: column; gap: 10px; animation: rise 200ms var(--ease); }
     .wrap.panel-open .panel { display: flex; }
     .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }
@@ -285,16 +484,17 @@
           ([name, value]) => `<button type="button" data-preset="${value}">${name} <b>${value}</b></button>`,
         ).join("")}</div></div>
         ${toggleRow("autoNext", "Go to the next chapter at the end", "Finds the Next link on the page")}
+        <div class="row"><span>Find the next chapter by<small>The address works on sites with chapter-6 style links</small></span><div class="seg"><button type="button" data-next-by="auto">Smart</button><button type="button" data-next-by="url">Address</button></div></div>
         <label class="row"><span>Wait before the next chapter</span><select data-set="nextDelay">${[0, 2, 4, 6, 10, 15]
           .map((value) => `<option value="${value}">${value ? `${value} seconds` : "Right away"}</option>`)
           .join("")}</select></label>
         ${toggleRow("holdPause", "Press and hold the page to pause", "Lets go and it carries on")}
         ${toggleRow("fade", "Fade the bar while reading", "Hover it to bring it back")}
         <div class="row"><span>Bar position</span><div class="seg"><button type="button" data-pos="top">Top</button><button type="button" data-pos="bottom">Bottom</button></div></div>
-        <p class="keys"><kbd>Space</kbd> play / pause &nbsp; <kbd>+</kbd><kbd>−</kbd> speed &nbsp; <kbd>N</kbd> next chapter &nbsp; <kbd>H</kbd> shrink &nbsp; <kbd>Esc</kbd> pause</p>
+        <p class="keys"><kbd>Space</kbd> play / pause &nbsp; <kbd>+</kbd><kbd>−</kbd> speed &nbsp; <kbd>N</kbd> next chapter &nbsp; <kbd>F</kbd> float on top &nbsp; <kbd>H</kbd> shrink &nbsp; <kbd>Esc</kbd> pause</p>
       </div>
       <div class="bar" role="toolbar" aria-label="Manhwa reader">
-        <span class="hold">Paused while you hold</span>
+        <span class="hold" role="status"></span>
         <button type="button" class="play" data-act="play" title="Play / pause (Space)">${ICON.play}</button>
         <div class="controls">
           <button type="button" class="icon" data-act="slower" title="Slower (−)">${ICON.minus}</button>
@@ -305,6 +505,7 @@
           <span class="status">0%</span>
         </div>
         <div class="notice" role="status"><span></span><button type="button" data-act="cancel">Cancel</button><button type="button" class="go" data-act="next">Next ${ICON.next}</button></div>
+        <button type="button" class="icon float-btn" data-act="float" title="Float on top of other apps (F)">${ICON.float}</button>
         <button type="button" class="icon" data-act="settings" title="Settings">${ICON.gear}</button>
         <button type="button" class="icon shrink-btn" data-act="shrink" title="Shrink (H)">${ICON.shrink}</button>
         <button type="button" class="icon" data-act="close" title="Close the reader">${ICON.close}</button>
@@ -335,6 +536,8 @@
       noticeCancel: $('.notice [data-act="cancel"]'),
       noticeNext: $('.notice [data-act="next"]'),
       gear: $('[data-act="settings"]'),
+      float: $('[data-act="float"]'),
+      tip: $(".hold"),
     };
 
     // Keep focus on the page so Space and the arrow keys keep working there.
@@ -345,6 +548,11 @@
       const button = event.target.closest("button");
       if (!button) return;
       if (button.dataset.preset) return setSpeed(Number(button.dataset.preset));
+      if (button.dataset.nextBy) {
+        settings.nextBy = button.dataset.nextBy;
+        persist();
+        return render();
+      }
       if (button.dataset.pos) {
         settings.position = button.dataset.pos;
         persist();
@@ -398,25 +606,42 @@
     ui.status.textContent = left > 1 ? `${done}% · ${formatTime(left)} left` : `${done}%`;
   }
 
+  function flash(message) {
+    tip = message;
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(() => {
+      tip = "";
+      render();
+    }, 3500);
+    render();
+  }
+
   function render() {
     if (!ui.wrap) return;
     const wrap = ui.wrap;
+    const tipText = playing && held ? "Paused while you hold" : tip;
     wrap.classList.toggle("top", settings.position === "top");
     wrap.classList.toggle("bottom", settings.position !== "top");
     wrap.classList.toggle("mini", collapsed);
     wrap.classList.toggle("panel-open", panelOpen && !collapsed);
-    wrap.classList.toggle("held", playing && held);
-    wrap.classList.toggle("dim", settings.fade && playing && !held && !hovering && !panelOpen && !countdown);
+    wrap.classList.toggle("tipping", Boolean(tipText));
+    wrap.classList.toggle("dim", settings.fade && playing && !held && !hovering && !panelOpen && !countdown && !tip);
     wrap.classList.toggle("noticing", Boolean(countdown) || ended);
+    if (tipText) ui.tip.textContent = tipText;
     ui.gear.classList.toggle("on", panelOpen);
+    ui.float.hidden = !canFloat();
+    ui.float.innerHTML = pip ? ICON.dock : ICON.float;
+    ui.float.title = pip ? "Back to the page (F)" : "Float on top of other apps (F)";
+    ui.float.classList.toggle("on", Boolean(pip));
     for (const button of ui.plays) {
       button.innerHTML = playing ? ICON.pause : ICON.play;
       button.setAttribute("aria-label", playing ? "Pause" : "Play");
     }
     for (const label of ui.speeds) label.textContent = settings.speed;
-    if (document.activeElement !== hostEl || shadow.activeElement !== ui.range) ui.range.value = toSlider(settings.speed);
+    if (doc.activeElement !== hostEl || shadow.activeElement !== ui.range) ui.range.value = toSlider(settings.speed);
     ui.range.style.setProperty("--fill", `${(toSlider(settings.speed) / 10).toFixed(1)}%`);
     for (const chip of shadow.querySelectorAll("[data-preset]")) chip.classList.toggle("on", Number(chip.dataset.preset) === settings.speed);
+    for (const seg of shadow.querySelectorAll("[data-next-by]")) seg.classList.toggle("on", seg.dataset.nextBy === settings.nextBy);
     for (const seg of shadow.querySelectorAll("[data-pos]")) seg.classList.toggle("on", seg.dataset.pos === (settings.position === "top" ? "top" : "bottom"));
     for (const input of shadow.querySelectorAll("[data-set]")) {
       const value = settings[input.dataset.set];
@@ -438,33 +663,55 @@
 
   /* ---------- scrolling ---------- */
 
+  let scrollTarget = null;
   function bindScroller(next) {
-    const target = (el) => (el === rootEl() ? window : el);
-    if (scroller) target(scroller).removeEventListener("scroll", onScroll);
+    scrollTarget?.removeEventListener("scroll", onScroll);
     scroller = next;
-    target(scroller).addEventListener("scroll", onScroll, { passive: true });
+    scrollTarget = scroller === rootEl() ? win : scroller;
+    scrollTarget.addEventListener("scroll", onScroll, { passive: true });
+  }
+
+  function unbindScroller() {
+    scrollTarget?.removeEventListener("scroll", onScroll);
+    scrollTarget = null;
+    scroller = null;
   }
 
   let statusQueued = false;
   function onScroll() {
     if (statusQueued) return;
     statusQueued = true;
-    requestAnimationFrame(() => {
+    win.requestAnimationFrame(() => {
       statusQueued = false;
-      if (ended && !atEnd()) {
+      if (ended && scroller && !atEnd()) {
         ended = false;
         render();
       } else renderStatus();
     });
   }
 
+  // Frames come from whichever window is showing the chapter, so a floating
+  // window keeps scrolling even when the tab behind it is covered.
+  let rafWin = window;
+  function startFrames() {
+    stopFrames();
+    rafWin = win;
+    last = 0;
+    raf = rafWin.requestAnimationFrame(frame);
+  }
+
+  function stopFrames() {
+    rafWin.cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
   function frame(now) {
-    raf = requestAnimationFrame(frame);
+    raf = rafWin.requestAnimationFrame(frame);
     const dt = last ? Math.min(now - last, 100) / 1000 : 0;
     last = now;
-    if (held || countdown) return;
+    if (held || countdown || !scroller) return;
 
-    if (atEnd()) {
+    if (atEnd() || pastLastPanel(now)) {
       carry = 0;
       endSince ||= now;
       // Wait a moment: lazy loaded pages often grow once the bottom comes into view.
@@ -489,8 +736,9 @@
 
   async function lockScreen() {
     try {
-      if (!wakeLock && navigator.wakeLock && document.visibilityState === "visible") {
-        wakeLock = await navigator.wakeLock.request("screen");
+      const lock = win.navigator.wakeLock;
+      if (!wakeLock && lock && doc.visibilityState === "visible") {
+        wakeLock = await lock.request("screen");
         wakeLock.addEventListener("release", () => (wakeLock = null));
       }
     } catch {
@@ -504,25 +752,24 @@
   }
 
   function play() {
-    if (!scroller || !document.contains(scroller === rootEl() ? document.documentElement : scroller)) bindScroller(findScroller());
-    else if (scroller === rootEl() && !rootCanScroll()) bindScroller(findScroller());
+    if (!scroller || !scroller.isConnected || scroller.ownerDocument !== doc || (scroller === rootEl() && !rootCanScroll())) {
+      bindScroller(findScroller());
+    }
     if (atEnd() && maxScroll() > 0) {
       reachEnd();
       return;
     }
     ended = false;
     playing = true;
-    last = 0;
     endSince = 0;
-    cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(frame);
+    startFrames();
     lockScreen();
     render();
   }
 
   function pause() {
     playing = false;
-    cancelAnimationFrame(raf);
+    stopFrames();
     stopCountdown();
     unlockScreen();
     render();
@@ -536,7 +783,7 @@
   function reachEnd() {
     const next = settings.autoNext ? findNext() : null;
     playing = false;
-    cancelAnimationFrame(raf);
+    stopFrames();
     unlockScreen();
     if (next) {
       if (!settings.nextDelay) return goNext();
@@ -559,11 +806,37 @@
       ended = true;
       return render();
     }
+    // A guessed address might be a chapter that isn't out yet, so look before leaving.
+    if (next.check && !next.checked) {
+      const controller = new AbortController();
+      fetch(next.check, { credentials: "include", signal: controller.signal })
+        .then((response) => {
+          controller.abort();
+          return response.status === 404 || response.status === 410;
+        })
+        .catch(() => false)
+        .then((missing) => {
+          if (!open) return;
+          if (missing) {
+            ended = true;
+            flash("That was the latest chapter");
+            return;
+          }
+          next.checked = true;
+          leave(next);
+        });
+      return render();
+    }
+    leave(next);
+  }
+
+  function leave(next) {
+    // The floating window belongs to this page, so the next chapter opens back in the tab.
+    if (pip) dock({ follow: false });
     data = { ...data, resume: { host, at: Date.now() } };
     store.save(data);
     render();
-    if (next.tagName === "LINK") location.href = next.href;
-    else next.click();
+    next.go();
     // Single page sites swap the chapter without reloading, so pick up from here.
     setTimeout(() => {
       if (!open) return;
@@ -571,6 +844,134 @@
       carry = 0;
       play();
     }, 2500);
+  }
+
+  /* ---------- floating window ---------- */
+
+  const FLOAT_CSS = `
+    html { background: #0f0d0a; color-scheme: dark; scrollbar-width: thin; scrollbar-color: #5a5349 transparent; }
+    body { margin: 0; }
+    .strip { display: flex; flex-direction: column; align-items: center; }
+    .strip img { display: block; width: 100%; max-width: 1000px; height: auto; min-height: 24px; }
+    .end { padding: 48px 16px 140px; text-align: center; color: #8c8274; font: 500 13px/1.4 ui-sans-serif, system-ui, sans-serif; }
+  `;
+
+  /** Reads image bytes with the page's own cookies and referrer, for sites that block hotlinking. */
+  function retryImage(img, src) {
+    fetch(src, { credentials: "include", referrer: location.href })
+      .then((response) => (response.ok ? response.blob() : Promise.reject()))
+      .then((blob) => (img.src = URL.createObjectURL(blob)))
+      .catch(() => img.remove());
+  }
+
+  async function float() {
+    if (pip) return dock({ follow: true });
+    if (!canFloat()) return flash("This browser can't float windows — use Chrome or Edge");
+    const images = chapterImages();
+    if (images.length === 0) return flash("Couldn't find the chapter images on this page");
+
+    // Start the floating window at the panel you're reading now.
+    const startAt = Math.max(0, images.findIndex((item) => item.el.getBoundingClientRect().bottom > window.innerHeight * 0.25));
+    let next;
+    try {
+      next = await window.documentPictureInPicture.requestWindow({
+        width: Math.min(520, Math.round(screen.availWidth * 0.4)),
+        height: Math.round(screen.availHeight * 0.92),
+      });
+    } catch {
+      return flash("The browser blocked the floating window — click Float again");
+    }
+
+    const fdoc = next.document;
+    fdoc.title = document.title ? `Reading · ${document.title}` : "Manhwa reader";
+    const style = fdoc.createElement("style");
+    style.textContent = FLOAT_CSS;
+    const strip = fdoc.createElement("div");
+    strip.className = "strip";
+    floated = images.map((item) => {
+      const img = fdoc.createElement("img");
+      img.alt = "";
+      img.decoding = "async";
+      if (item.width && item.height) {
+        img.width = item.width;
+        img.height = item.height;
+      }
+      img.addEventListener("error", () => retryImage(img, item.src), { once: true });
+      img.src = item.src;
+      strip.append(img);
+      return { original: item.el, copy: img };
+    });
+    const end = fdoc.createElement("p");
+    end.className = "end";
+    end.textContent = "End of the chapter — the next one opens back in your browser tab";
+    fdoc.head.append(style);
+    fdoc.body.append(strip, end);
+
+    const wasPlaying = playing;
+    stopFrames();
+    unlockScreen();
+    detach();
+    unbindScroller();
+    pip = next;
+    win = next;
+    doc = fdoc;
+    fdoc.body.append(hostEl);
+    attach();
+    next.addEventListener("pagehide", () => dock({ follow: true }), { once: true });
+
+    const settle = () => {
+      floated[startAt]?.copy.scrollIntoView({ block: "start", behavior: "instant" });
+      bindScroller(findScroller());
+      if (wasPlaying) play();
+      else render();
+    };
+    // Panels above the start point have to load before jumping there lands right.
+    const before = floated.slice(0, startAt).map(({ copy }) => copy);
+    const pending = before.filter((img) => !img.complete && !img.hasAttribute("width"));
+    if (pending.length === 0) settle();
+    else {
+      let left = pending.length;
+      const done = () => --left === 0 && settle();
+      for (const img of pending) {
+        img.addEventListener("load", done, { once: true });
+        img.addEventListener("error", done, { once: true });
+      }
+      setTimeout(() => left > 0 && ((left = 0), settle()), 2500);
+    }
+  }
+
+  /** Brings the toolbar back to the tab, at the panel the floating window was on. */
+  function dock({ follow }) {
+    if (!pip) return;
+    const closing = pip;
+    const wasPlaying = playing;
+    let reading = null;
+    if (follow && scroller) {
+      const top = position();
+      reading = floated.find(({ copy }) => copy.offsetTop + copy.offsetHeight > top + 40)?.original;
+    }
+    stopFrames();
+    unlockScreen();
+    detach();
+    unbindScroller();
+    pip = null;
+    floated = [];
+    win = window;
+    doc = document;
+    if (open) {
+      (document.body || document.documentElement).appendChild(hostEl);
+      attach();
+      reading?.scrollIntoView({ block: "start", behavior: "instant" });
+      bindScroller(findScroller());
+      if (wasPlaying && follow) play();
+      else if (wasPlaying) playing = false;
+      render();
+    } else hostEl.remove();
+    try {
+      closing.close();
+    } catch {
+      /* already closed */
+    }
   }
 
   function act(action) {
@@ -598,6 +999,8 @@
         return render();
       case "next":
         return goNext();
+      case "float":
+        return float();
       case "close":
         return hide();
     }
@@ -617,6 +1020,7 @@
     else if (key === "+" || key === "=") act("faster");
     else if (key === "-" || key === "_" || key === "−") act("slower");
     else if (key === "h" || key === "H") act(collapsed ? "expand" : "shrink");
+    else if ((key === "f" || key === "F") && canFloat()) float();
     else if ((key === "n" || key === "N") && findNext()) goNext();
     else if (key === "Escape" && (playing || countdown || panelOpen)) {
       panelOpen = false;
@@ -641,11 +1045,36 @@
   }
 
   function onVisibility() {
-    if (document.visibilityState === "visible" && playing) lockScreen();
+    if (doc.visibilityState === "visible" && playing) lockScreen();
   }
 
   function onResize() {
     renderStatus();
+  }
+
+  let attached = null;
+  function attach() {
+    attached = { win, doc };
+    win.addEventListener("keydown", onKey, true);
+    win.addEventListener("pointerdown", onPointerDown, true);
+    win.addEventListener("pointerup", onPointerUp, true);
+    win.addEventListener("pointercancel", onPointerUp, true);
+    win.addEventListener("blur", onPointerUp);
+    win.addEventListener("resize", onResize);
+    doc.addEventListener("visibilitychange", onVisibility);
+  }
+
+  function detach() {
+    if (!attached) return;
+    const { win: w, doc: d } = attached;
+    w.removeEventListener("keydown", onKey, true);
+    w.removeEventListener("pointerdown", onPointerDown, true);
+    w.removeEventListener("pointerup", onPointerUp, true);
+    w.removeEventListener("pointercancel", onPointerUp, true);
+    w.removeEventListener("blur", onPointerUp);
+    w.removeEventListener("resize", onResize);
+    d.removeEventListener("visibilitychange", onVisibility);
+    attached = null;
   }
 
   /* ---------- open / close ---------- */
@@ -657,13 +1086,7 @@
     collapsed = false;
     (document.body || document.documentElement).appendChild(hostEl);
     bindScroller(findScroller());
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("pointerup", onPointerUp, true);
-    window.addEventListener("pointercancel", onPointerUp, true);
-    window.addEventListener("blur", onPointerUp);
-    window.addEventListener("resize", onResize);
-    document.addEventListener("visibilitychange", onVisibility);
+    attach();
     render();
     if (autoplay) play();
   }
@@ -675,16 +1098,10 @@
     panelOpen = false;
     held = false;
     ended = false;
+    dock({ follow: true });
     hostEl.remove();
-    window.removeEventListener("keydown", onKey, true);
-    window.removeEventListener("pointerdown", onPointerDown, true);
-    window.removeEventListener("pointerup", onPointerUp, true);
-    window.removeEventListener("pointercancel", onPointerUp, true);
-    window.removeEventListener("blur", onPointerUp);
-    window.removeEventListener("resize", onResize);
-    document.removeEventListener("visibilitychange", onVisibility);
-    if (scroller) (scroller === rootEl() ? window : scroller).removeEventListener("scroll", onScroll);
-    scroller = null;
+    detach();
+    unbindScroller();
   }
 
   const api = {

@@ -42,6 +42,7 @@ const SHORTCUTS = [
   ["Space", "Play or pause"],
   ["+  −", "Faster or slower"],
   ["N", "Next chapter now"],
+  ["F", "Float on top of other apps"],
   ["H", "Shrink to a small pill"],
   ["Esc", "Pause"],
   ["Hold", "Press and hold the page to pause"],
@@ -98,27 +99,45 @@ function SettingRow({ title, hint, children }) {
   );
 }
 
-/** A made up chapter so the speed can be tried without leaving the page. */
+const PANEL_TONES = [
+  ["#e9dfcf", "#c9b79c"],
+  ["#dfe7ec", "#a9bccb"],
+  ["#ece1d6", "#c8ab95"],
+  ["#e3e8dc", "#aebc9f"],
+  ["#eadcd8", "#c4a49c"],
+];
+
+const escapeXml = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** One drawn panel as an image, so the floating window can pick it up like a real chapter. */
+function panelImage(line, index) {
+  const [ground, figure] = PANEL_TONES[index % PANEL_TONES.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
+<rect width="800" height="1100" fill="${ground}"/>
+<ellipse cx="400" cy="1180" rx="300" ry="420" fill="${figure}" opacity="0.7"/>
+<circle cx="400" cy="700" r="110" fill="${figure}"/>
+<rect x="110" y="170" width="580" height="150" rx="75" fill="#fffdfa"/>
+<path d="M380 318 L400 370 L430 318 Z" fill="#fffdfa"/>
+<text x="400" y="258" text-anchor="middle" font-family="system-ui, sans-serif" font-size="30" font-weight="600" fill="#1e1b16">${escapeXml(line)}</text>
+<text x="770" y="1076" text-anchor="end" font-family="system-ui, sans-serif" font-size="22" fill="#8c8274">Panel ${index + 1}</text>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** A made up chapter so the speed and the floating window can be tried without leaving the page. */
 function SampleChapter() {
-  const tones = ["#e9dfcf", "#dfe7ec", "#ece1d6", "#e3e8dc", "#eadcd8"];
   return (
-    <div className="mx-auto flex max-w-[48rem] flex-col gap-1.5">
+    <div className="mx-auto flex max-w-[48rem] flex-col gap-1">
       {SAMPLE_LINES.map((line, index) => (
-        <div
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           key={line}
-          className="relative flex min-h-[56rem] items-start justify-center overflow-hidden rounded-xl p-6"
-          style={{ background: tones[index % tones.length] }}
-        >
-          <div
-            aria-hidden
-            className="absolute inset-x-[18%] bottom-0 h-[62%] rounded-t-[50%] opacity-60"
-            style={{ background: "linear-gradient(to top, rgb(30 27 22 / 0.18), rgb(30 27 22 / 0.04))" }}
-          />
-          <p className="relative mt-[10%] max-w-[30rem] rounded-[2rem] bg-surface px-5 py-3 text-center text-base font-semibold text-ink shadow-card">
-            {line}
-          </p>
-          <span className="absolute right-3 bottom-3 text-2xs font-medium text-ink-3">Panel {index + 1}</span>
-        </div>
+          src={panelImage(line, index)}
+          alt={`Panel ${index + 1}: ${line}`}
+          width={800}
+          height={1100}
+          className="block h-auto w-full rounded-xl"
+        />
       ))}
     </div>
   );
@@ -249,6 +268,17 @@ export function ManhwaReader() {
           <div className="mt-2 divide-y divide-grid">
             <SettingRow title="Go to the next chapter at the end" hint="Finds the site's Next link and keeps scrolling">
               <Switch checked={defaults.autoNext} onCheckedChange={(autoNext) => update({ autoNext })} />
+            </SettingRow>
+            <SettingRow title="Find the next chapter by" hint="Address changes chapter-6 to chapter-7 in the link">
+              <Segmented
+                label="Find the next chapter by"
+                value={defaults.nextBy}
+                onChange={(nextBy) => update({ nextBy })}
+                options={[
+                  { value: "auto", label: "Smart" },
+                  { value: "url", label: "Address" },
+                ]}
+              />
             </SettingRow>
             <SettingRow title="Wait before the next chapter">
               <Segmented
