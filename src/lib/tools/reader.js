@@ -1,7 +1,10 @@
 /** Builds the manhwa reader bookmarklet and browser extension from one toolbar script. */
 
 export const READER_SCRIPT_URL = "/reader/manhwa-reader.js";
-export const EXTENSION_VERSION = "1.0.0";
+/** The version written at the top of the toolbar script; Chrome only notices updates when it changes. */
+export function readerVersion(source) {
+  return (source && source.match(/const VERSION = "([\d.]+)"/)?.[1]) || "1.0.0";
+}
 
 export const SPEED_PRESETS = [
   { label: "Slow", value: 30 },
@@ -58,12 +61,12 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 });
 `;
 
-function manifest() {
+function manifest(version) {
   const icons = { 16: "icons/16.png", 32: "icons/32.png", 48: "icons/48.png", 128: "icons/128.png" };
   return {
     manifest_version: 3,
     name: "Manhwa Reader",
-    version: EXTENSION_VERSION,
+    version,
     description: "Hands-free auto-scroll for manhwa, webtoons and any long page. Set the speed and read without touching the mouse.",
     icons,
     action: { default_title: "Manhwa Reader (Alt+Shift+R)", default_icon: icons },
@@ -136,7 +139,8 @@ Use
 - The speed is remembered for each site. At the end of a chapter it can open the next one and keep going.
 
 Update
-Download a new copy from the tool page, replace the files in the same folder,
+Your copy never updates itself. The version shows at the bottom of the
+toolbar's settings. Download a new copy from the tool page, replace the files in the same folder,
 then click the reload arrow on the extension's card in chrome://extensions.
 `;
 
@@ -144,7 +148,7 @@ export async function buildExtensionZip(source, defaults) {
   const { zipSync, strToU8 } = await import("fflate");
   const [i16, i32, i48, i128] = await Promise.all([16, 32, 48, 128].map(drawIcon));
   const files = {
-    "manhwa-reader/manifest.json": strToU8(JSON.stringify(manifest(), null, 2)),
+    "manhwa-reader/manifest.json": strToU8(JSON.stringify(manifest(readerVersion(source)), null, 2)),
     "manhwa-reader/background.js": strToU8(BACKGROUND),
     "manhwa-reader/reader.js": strToU8(wrapSource(source, defaults)),
     "manhwa-reader/README.txt": strToU8(README),

@@ -7,6 +7,8 @@
 (() => {
   "use strict";
 
+  // Bump on every change: the extension's version is read from here, and the toolbar shows it.
+  const VERSION = "1.1.0";
   const KEY = "manhwa-reader";
   const EXT = typeof chrome !== "undefined" && !!(chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.local);
   const DEFAULTS = typeof MR_DEFAULTS !== "undefined" && MR_DEFAULTS ? MR_DEFAULTS : {};
@@ -145,7 +147,14 @@
     }
     let last = null;
     for (const match of path.matchAll(CHAPTER)) last = match;
-    if (!last) return null;
+    if (!last) {
+      // No "chapter" word: take a small number ending the address, as in /title/12 or /title-12/.
+      const pathname = path.slice(0, path.length - url.search.length);
+      const tail = pathname.match(/([/_-])(\d{1,4})(?:[.-](\d{1,2}))?\/?$/);
+      if (!tail || Number(tail[2]) > 3000) return null;
+      last = Object.assign(["", "", "", tail[2], tail[3]], { index: tail.index + 1 });
+      last[0] = tail[0].slice(1).replace(/\/$/, "");
+    }
     const minor = last[4] && last[4].length <= 2 ? Number(`0.${last[4]}`) : 0;
     return { url, path, match: last, number: Number(last[3]) + minor, prefix: path.slice(0, last.index) };
   }
@@ -460,6 +469,7 @@
     select { all: unset; height: 28px; line-height: 28px; padding: 0 10px; border-radius: 9px; background: var(--soft); font-size: 12px; cursor: pointer; }
     select option { color: #1e1b16; }
     .keys { color: var(--dim); font-size: 11.5px; line-height: 1.6; padding-top: 8px; border-top: 1px solid var(--soft); }
+    .ver { float: right; opacity: 0.7; font-variant-numeric: tabular-nums; }
     kbd { display: inline-block; min-width: 18px; padding: 0 5px; margin: 0 1px; border-radius: 5px; background: var(--soft); color: var(--fg); font: 600 11px/18px ui-monospace, monospace; text-align: center; }
     .pill { display: none; align-items: center; gap: 2px; padding: 4px; }
     .pill .play { width: 34px; height: 34px; }
@@ -491,7 +501,7 @@
         ${toggleRow("holdPause", "Press and hold the page to pause", "Lets go and it carries on")}
         ${toggleRow("fade", "Fade the bar while reading", "Hover it to bring it back")}
         <div class="row"><span>Bar position</span><div class="seg"><button type="button" data-pos="top">Top</button><button type="button" data-pos="bottom">Bottom</button></div></div>
-        <p class="keys"><kbd>Space</kbd> play / pause &nbsp; <kbd>+</kbd><kbd>−</kbd> speed &nbsp; <kbd>N</kbd> next chapter &nbsp; <kbd>F</kbd> float on top &nbsp; <kbd>H</kbd> shrink &nbsp; <kbd>Esc</kbd> pause</p>
+        <p class="keys"><kbd>Space</kbd> play / pause &nbsp; <kbd>+</kbd><kbd>−</kbd> speed &nbsp; <kbd>N</kbd> next chapter &nbsp; <kbd>F</kbd> float on top &nbsp; <kbd>H</kbd> shrink &nbsp; <kbd>Esc</kbd> pause &nbsp; <span class="ver">v${VERSION}</span></p>
       </div>
       <div class="bar" role="toolbar" aria-label="Manhwa reader">
         <span class="hold" role="status"></span>

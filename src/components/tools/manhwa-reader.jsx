@@ -14,6 +14,7 @@ import {
   buildBookmarklet,
   buildExtensionZip,
   loadReaderSource,
+  readerVersion,
   wrapSource,
 } from "@/lib/tools/reader";
 import { cn } from "@/lib/utils";
@@ -96,6 +97,16 @@ function SettingRow({ title, hint, children }) {
       </div>
       {children}
     </div>
+  );
+}
+
+/** The bookmark and the extension carry a copy of the script, so they stay on the version they were made from. */
+function UpdateNote({ version, what }) {
+  return (
+    <p className="mt-3 rounded-xl bg-sunken px-3 py-2.5 text-xs text-ink-3">
+      <span className="font-semibold text-ink-2">Latest is v{version}.</span> Your copy doesn&apos;t update itself — the version shows at the
+      bottom of the toolbar&apos;s settings. If it&apos;s older or missing: {what}.
+    </p>
   );
 }
 
@@ -359,6 +370,7 @@ export function ManhwaReader() {
                 </Button>
                 <p className="text-xs text-ink-3">For phones: make any bookmark, then paste this as its URL.</p>
               </div>
+              <UpdateNote version={readerVersion(source)} what="Drag the button again and delete the old bookmark" />
             </>
           ) : (
             <>
@@ -384,6 +396,7 @@ export function ManhwaReader() {
                   The extension also carries on into the next chapter after the page reloads, and remembers your speed per site.
                 </p>
               </div>
+              <UpdateNote version={readerVersion(source)} what="Download again, replace the files in the same folder, then click the reload arrow in chrome://extensions" />
             </>
           )}
         </Card>
