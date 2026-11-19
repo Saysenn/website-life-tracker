@@ -72,14 +72,21 @@ export async function requireGuest() {
   return chat;
 }
 
-export async function setGuestCookie(chat, token) {
+/** A guest cookie lasts as long as the chat; maxDays caps it (your own chat on a borrowed phone). */
+export async function setGuestCookie(chat, token, { maxDays = 400 } = {}) {
+  const cap = Date.now() + maxDays * 24 * 60 * 60 * 1000;
+  const expires = Math.min(expiryOf(chat.createdAt, await autoDeleteOn()) ?? cap, cap);
   (await cookies()).set(GUEST_COOKIE, `${chat.id}.${token}`, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: "/",
-    expires: new Date(expiryOf(chat.createdAt, await autoDeleteOn()) ?? Date.now() + 400 * 24 * 60 * 60 * 1000),
+    expires: new Date(expires),
   });
+}
+
+export async function clearGuestCookie() {
+  (await cookies()).delete(GUEST_COOKIE);
 }
 
 export function visitorInfo(request) {

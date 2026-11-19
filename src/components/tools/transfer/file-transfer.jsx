@@ -226,6 +226,30 @@ function LinkCard({ linkKey, onRotate, stats, autoDelete, onAutoDelete }) {
         </div>
       </div>
 
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
+        <span>
+          Sending from another device yourself? Open{" "}
+          <a
+            href={origin ? `${origin}/me` : undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-ink-2 underline decoration-ink-4 underline-offset-2 hover:text-ink"
+          >
+            {origin ? `${origin.replace(/^https?:\/\//, "")}/me` : "/me"}
+          </a>{" "}
+          and sign in. It lands in the Me chat.
+        </span>
+        <button
+          type="button"
+          onClick={() => copy(`${origin}/me`, "Your link")}
+          disabled={!origin}
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ink-2 transition-colors hover:bg-hover hover:text-ink"
+        >
+          <Copy className="size-[1.2rem]" />
+          Copy
+        </button>
+      </div>
+
       <div className="mt-3.5 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-ink-3">
         <span className="inline-flex items-center gap-1.5">
           <ShieldCheck className="size-[1.3rem] text-success" />

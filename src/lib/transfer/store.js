@@ -13,7 +13,7 @@ import {
   RETENTION_MS,
   TYPING_MS,
 } from "./constants";
-import { hashToken, randomId, sameText, seal, sealText, unseal, unsealText } from "./crypto";
+import { hashToken, randomId, sameText, seal, sealText, selfToken, unseal, unsealText } from "./crypto";
 import { autoDeleteOn, expiryOf, rememberAutoDelete } from "./settings";
 
 const STARTS_PER_HOUR = 5;
@@ -180,6 +180,47 @@ export async function agentChat() {
     })
     .returning();
   return { chat, created: true };
+}
+
+export const SELF_IP = "self";
+const SELF_CHAT_NAME = "Me";
+
+/**
+ * Your own chat, for sending things to the admin from any device after signing in.
+ * One chat for every device; each sign in records which device it was.
+ * Made again after each cleanup, like the Grok chat.
+ */
+export async function openSelfChat({ ip, location, userAgent }) {
+  const now = Date.now();
+  const fresh = (await autoDeleteOn()) ? gt(transferChats.createdAt, now - RETENTION_MS) : undefined;
+  const device = { location: [ip, location].filter(Boolean).join(" · ") || null, userAgent };
+  const existing = await db.query.transferChats.findFirst({
+    where: and(eq(transferChats.ip, SELF_IP), fresh),
+    orderBy: desc(transferChats.createdAt),
+  });
+  if (existing) {
+    const [chat] = await db
+      .update(transferChats)
+      .set(device)
+      .where(eq(transferChats.id, existing.id))
+      .returning();
+    return { chat, token: selfToken(chat.id) };
+  }
+  const id = randomId(12);
+  const [chat] = await db
+    .insert(transferChats)
+    .values({
+      id,
+      name: SELF_CHAT_NAME,
+      tokenHash: hashToken(selfToken(id)),
+      ip: SELF_IP,
+      ...device,
+      createdAt: now,
+      activeAt: now,
+      guestSeenAt: now,
+    })
+    .returning();
+  return { chat, token: selfToken(id) };
 }
 
 export async function setBlocked(id, blocked) {

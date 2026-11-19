@@ -31,6 +31,8 @@ export function notifyAdmin(event) {
   const { chat } = event;
   const now = Date.now();
   if (!mailStatus().configured || !defaultRecipient()) return;
+  // Your own chat is you talking to yourself, so it never emails.
+  if (chat.ip === "self") return;
   if (event.type !== "start") {
     if (now - (chat.adminSeenAt ?? 0) < AWAY_MS) return;
     if (now - (chat.notifiedAt ?? 0) < QUIET_MS) return;

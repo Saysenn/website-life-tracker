@@ -1,5 +1,5 @@
 import "server-only";
-import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 
 let cachedKey;
 
@@ -45,3 +45,10 @@ export function sameText(a, b) {
   const right = Buffer.from(String(b ?? ""));
   return left.length === right.length && timingSafeEqual(left, right);
 }
+
+/**
+ * The token for your own chat is derived from its id, so every device you sign in on
+ * gets the same one and signing in on a new phone never logs another out.
+ * Deleting the chat gives the next one a new id, which ends every old sign in.
+ */
+export const selfToken = (chatId) => createHmac("sha256", key()).update(`self-chat:${chatId}`).digest("base64url");

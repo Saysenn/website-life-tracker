@@ -1,7 +1,7 @@
 import { Link2Off } from "lucide-react";
 import { GuestTransfer } from "@/components/tools/transfer/guest-transfer";
 import { guestChat } from "@/lib/transfer/access";
-import { autoDeleteOn, linkMatches } from "@/lib/transfer/store";
+import { SELF_IP, autoDeleteOn, linkMatches } from "@/lib/transfer/store";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,9 @@ export const metadata = {
 
 export default async function SendPage({ params }) {
   const { key } = await params;
-  const [valid, chat, autoDelete] = await Promise.all([linkMatches(key), guestChat(), autoDeleteOn()]);
+  const [valid, current, autoDelete] = await Promise.all([linkMatches(key), guestChat(), autoDeleteOn()]);
+  // Being signed in to your own chat (/me) on this device does not count as a visitor chat here.
+  const chat = current?.ip === SELF_IP ? null : current;
 
   if (!valid && !chat) {
     return (

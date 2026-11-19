@@ -1,10 +1,12 @@
 "use client";
 
-import { ArrowRight, Eraser, Lock, MessageSquare, ShieldCheck, Timer, X } from "lucide-react";
+import { ArrowRight, Eraser, Lock, LogOut, MessageSquare, ShieldCheck, Timer, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { logoutSelf } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
+import { Tooltip } from "@/components/ui/tooltip";
 import { HOST_NAME, MAX_FILE_BYTES, MAX_NAME, RETENTION_DAYS } from "@/lib/transfer/constants";
 import { formatBytes } from "@/lib/tools/files";
 import { cn, plural } from "@/lib/utils";
@@ -143,7 +145,7 @@ function Start({ linkKey, autoDelete, onStarted }) {
   );
 }
 
-function GuestHeader({ chat, peer, files, tools }) {
+function GuestHeader({ chat, peer, files, tools, self }) {
   const now = useNow();
   const status = peer?.typing ? "Typing…" : peer?.online ? "Online now" : peer?.seenAt ? `Seen ${timeAgo(peer.seenAt, now)}` : "Away";
   return (
@@ -172,6 +174,7 @@ function GuestHeader({ chat, peer, files, tools }) {
       )}
       <div className="flex shrink-0 items-center gap-1">
         {tools}
+        {self && <SignOut />}
         <DownloadAll href="/api/transfer/files/zip" count={readyCount(files)} compact className="sm:hidden" />
         <DownloadAll href="/api/transfer/files/zip" count={readyCount(files)} className="hidden sm:inline-flex" />
       </div>
@@ -179,7 +182,24 @@ function GuestHeader({ chat, peer, files, tools }) {
   );
 }
 
-function useUnreadTitle() {
+/** Your own chat only: ends the sign in on this device. */
+function SignOut() {
+  return (
+    <form action={logoutSelf}>
+      <Tooltip label="Sign out on this device">
+        <button
+          type="submit"
+          aria-label="Sign out on this device"
+          className="flex size-8 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        >
+          <LogOut className="size-[1.4rem]" />
+        </button>
+      </Tooltip>
+    </form>
+  );
+}
+
+function useUnreadTitle(title) {
   const [unread, setUnread] = useState(0);
   useEffect(() => {
     const clear = () => !document.hidden && setUnread(0);
@@ -187,15 +207,16 @@ function useUnreadTitle() {
     return () => document.removeEventListener("visibilitychange", clear);
   }, []);
   useEffect(() => {
-    document.title = unread ? `(${unread}) New message` : "Send files";
-  }, [unread]);
+    document.title = unread ? `(${unread}) New message` : title;
+  }, [unread, title]);
   return setUnread;
 }
 
-export function GuestTransfer({ linkKey, autoDelete = true, started: startedBefore }) {
+/** `self` is your own signed in chat (/me) rather than a visitor on the public link. */
+export function GuestTransfer({ linkKey, autoDelete = true, started: startedBefore, self = false }) {
   const [started, setStarted] = useState(startedBefore);
   const [initialFiles, setInitialFiles] = useState(null);
-  const setUnread = useUnreadTitle();
+  const setUnread = useUnreadTitle(self ? "Send to admin" : "Send files");
 
   if (!started) {
     return (
@@ -228,24 +249,35 @@ export function GuestTransfer({ linkKey, autoDelete = true, started: startedBefo
               setUnread((count) => count + messages.length);
             }}
             onPeerUnsent={(messages) => setUnread((count) => Math.max(0, count - messages.length))}
-            renderHeader={(state) => <GuestHeader {...state} />}
+            renderHeader={(state) => <GuestHeader {...state} self={self} />}
             renderEnded={(message) => (
               <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                 <MessageSquare className="size-[2.4rem] text-ink-4" strokeWidth={1.5} />
-                <p className="mt-3 text-sm font-medium">This chat has ended</p>
-                <p className="mt-0.5 max-w-[34rem] text-xs text-ink-3">{message}</p>
+                <p className="mt-3 text-sm font-medium">{self ? "You were signed out" : "This chat has ended"}</p>
+                <p className="mt-0.5 max-w-[34rem] text-xs text-ink-3">
+                  {self ? "The chat was deleted or your sign in on this device ran out." : message}
+                </p>
                 <Button variant="soft" size="sm" className="mt-4" onClick={() => window.location.reload()}>
-                  Start a new chat
+                  {self ? "Sign in again" : "Start a new chat"}
                 </Button>
               </div>
             )}
             empty={
+              self ? (
+                <div className="m-auto max-w-[36rem] text-center">
+                  <p className="text-sm font-medium">Signed in on this device</p>
+                  <p className="mt-0.5 text-xs text-ink-3">
+                    Messages and files you send here land in the Me chat for {HOST_NAME}. Replies show up here too.
+                  </p>
+                </div>
+              ) : (
               <div className="m-auto max-w-[36rem] text-center">
                 <p className="text-sm font-medium">You are connected</p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   Drop files anywhere here or use the clip to send them. {HOST_NAME} can reply and send files back.
                 </p>
               </div>
+              )
             }
           />
         </div>

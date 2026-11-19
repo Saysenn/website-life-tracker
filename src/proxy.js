@@ -13,8 +13,8 @@ const OPEN_PAGES = new Set(["/", "/login"]);
 const DEVICE_COOKIE = "lt_device";
 const DEVICE_MAX_AGE = 400 * 24 * 60 * 60;
 
-/** Reachable from any device: file transfer guests, the token guarded agent API and the cron. */
-const PUBLIC = [/^\/send\//, /^\/api\/(mcp|cleaner)(\/[^/]+)?$/, /^\/api\/transfer\/(guest|files)\//, /^\/api\/cron\//];
+/** Reachable from any device: file transfer guests, your own sign-in-to-send page, the token guarded agent API and the cron. */
+const PUBLIC = [/^\/send\//, /^\/me$/, /^\/api\/(mcp|cleaner)(\/[^/]+)?$/, /^\/api\/transfer\/(guest|files)\//, /^\/api\/cron\//];
 
 /** Checked by their own route handlers, so they skip the login redirect. */
 const SELF_GUARDED = [/^\/api\/auth\//, /^\/api\/transfer\//];
