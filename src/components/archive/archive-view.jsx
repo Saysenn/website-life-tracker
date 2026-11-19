@@ -117,7 +117,7 @@ export function ArchiveView({ companies, groups, timezone }) {
           </span>
           <p className="mt-4 text-base font-semibold">Nothing archived yet</p>
           <p className="mt-1 max-w-[40rem] text-sm text-ink-3">
-            Closing a domain, hosting or RDP on the Companies page moves it here. You can bring it back any time.
+            Closing a domain, hosting or server on the Companies page moves it here. You can bring it back any time.
           </p>
         </div>
       )}

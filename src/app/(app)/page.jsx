@@ -118,7 +118,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-5">
-        <Card title="Spend by month" description="RDP renewals in USDT" className="lg:col-span-3 animate-rise">
+        <Card title="Spend by month" description="Server renewals in USDT" className="lg:col-span-3 animate-rise">
           <SpendBars months={spend.months} currency={pricing.currency} />
         </Card>
 

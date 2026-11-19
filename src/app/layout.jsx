@@ -7,7 +7,7 @@ const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-instrument"
 
 export const metadata = {
   title: { default: "Life Tracker", template: "%s · Life Tracker" },
-  description: "Domain, hosting and RDP renewals in one place.",
+  description: "Domain, hosting and server renewals in one place.",
   robots: { index: false, follow: false },
 };
 

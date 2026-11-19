@@ -73,7 +73,7 @@ export function GroupModal({ panel, today, currency, onClose }) {
       applyRows({ type: "remove", id: row.id });
       const result = await closeService(row.id, service.key);
       if (result.ok) {
-        toast.success(`${row.name} RDP moved to the archive`, {
+        toast.success(`${row.name} server moved to the archive`, {
           action: { label: "Undo", onClick: () => reopenService(row.id, service.key) },
         });
       } else {
@@ -87,7 +87,7 @@ export function GroupModal({ panel, today, currency, onClose }) {
       open={Boolean(panel)}
       onOpenChange={(next) => !next && onClose()}
       title={panel?.name ?? "Group"}
-      description={`${plural(rows.length, "company", "companies")} with an RDP`}
+      description={`${plural(rows.length, "company", "companies")} with a server`}
       className="max-w-[64rem]"
       autoFocus={false}
     >
@@ -132,7 +132,7 @@ export function GroupModal({ panel, today, currency, onClose }) {
                 <div className="flex items-center justify-end gap-0.5">
                   {row.hasProviderPassword && <CopyPassword companyId={row.id} kind="provider" />}
                   {row.hasPassword && <CopyPassword companyId={row.id} />}
-                  <RowAction label="RDP renewed today" onClick={() => renew(row)}>
+                  <RowAction label="Server renewed today" onClick={() => renew(row)}>
                     <CalendarCheck />
                   </RowAction>
                   <RowAction label="Close and archive" onClick={() => close(row)}>
@@ -184,7 +184,7 @@ export function GroupModal({ panel, today, currency, onClose }) {
           </div>
         </div>
       ) : (
-        <p className="py-8 text-center text-xs text-ink-3">No RDPs in this group yet.</p>
+        <p className="py-8 text-center text-xs text-ink-3">No servers in this group yet.</p>
       )}
     </Dialog>
   );

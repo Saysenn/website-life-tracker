@@ -639,7 +639,7 @@ function EmptyState({ filtering, onCreate, onClear }) {
       <p className="mt-1 max-w-[38rem] text-sm text-ink-3">
         {filtering
           ? "Try another search or clear the filters to see everything again."
-          : "Add your first company to start tracking its domain, hosting and RDP renewals."}
+          : "Add your first company to start tracking its domain, hosting and server renewals."}
       </p>
       {filtering ? (
         <Button variant="soft" className="mt-5" onClick={onClear}>

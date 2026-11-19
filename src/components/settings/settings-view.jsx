@@ -138,7 +138,7 @@ function RemindersSection({ settings, cronTime, timezone, mail }) {
           label="Grace period after the end date"
           htmlFor="grace-days"
           error={errors.graceDays}
-          hint="An RDP shows as Suspended for this many days after its renewal date and still gets a reminder every day. After that it needs rebuying."
+          hint="A server shows as Suspended for this many days after its renewal date and still gets a reminder every day. After that it needs rebuying."
         >
           <div className="flex items-center gap-2">
             <Input
@@ -243,7 +243,7 @@ function PricesSection({ pricing, methods, timezone }) {
   }
 
   return (
-    <Card title="Renewal prices" description="What RDPs cost to renew, and what each transfer costs in gas">
+    <Card title="Renewal prices" description="What servers cost to renew, and what each transfer costs in gas">
       <form onSubmit={submit} className="grid gap-5">
         <Field label="Main currency" htmlFor="currency" error={errors.currency} hint="Used when a price has no currency of its own">
           <Combobox

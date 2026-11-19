@@ -34,7 +34,7 @@ export const SERVICES = [
   },
   {
     key: "rdp",
-    label: "RDP",
+    label: "Server",
     start: "rdpStart",
     end: "rdpRenewal",
     closed: "rdpClosedAt",

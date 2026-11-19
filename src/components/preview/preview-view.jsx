@@ -77,7 +77,7 @@ export function PreviewView({ items, today, currency }) {
     <Page>
       <PageHeader
         title="Renewal preview"
-        description="RDPs that need paying soon, and what to send"
+        description="Servers that need paying soon, and what to send"
         actions={
           <>
             <Segmented label="Window" value={range} onChange={setRange} options={WINDOWS} />
@@ -187,7 +187,7 @@ export function PreviewView({ items, today, currency }) {
           <CircleCheck className="size-[2.4rem] text-success" strokeWidth={1.5} />
           <p className="mt-3 text-base font-semibold">Nothing to pay yet</p>
           <p className="mt-1 max-w-[38rem] text-sm text-ink-3">
-            {range === "month" ? "No RDP renews this month." : `No RDP renews in the next ${days} days. Try a longer window.`}
+            {range === "month" ? "No server renews this month." : `No server renews in the next ${days} days. Try a longer window.`}
           </p>
         </div>
       )}

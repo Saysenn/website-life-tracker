@@ -164,7 +164,7 @@ export function reminderEmail(digest, round = "noon") {
 
 export function testEmail() {
   const subject = "Life Tracker test email";
-  const message = "Email is working. Renewal reminders for your domains, hosting and RDPs will arrive at this address.";
+  const message = "Email is working. Renewal reminders for your domains, hosting and servers will arrive at this address.";
   return {
     subject,
     text: message,
