@@ -139,6 +139,8 @@ export const transferChats = sqliteTable(
     guestReadId: integer("guest_read_id").notNull().default(0),
     adminReadId: integer("admin_read_id").notNull().default(0),
     notifiedAt: integer("notified_at"),
+    /** Set when the admin deletes the chat. It stays restorable until purged TRASH_DAYS later. */
+    deletedAt: integer("deleted_at"),
   },
   (table) => [index("transfer_chats_active_idx").on(table.activeAt), index("transfer_chats_ip_idx").on(table.ip, table.createdAt)],
 );

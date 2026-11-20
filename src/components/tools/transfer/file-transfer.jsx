@@ -15,6 +15,7 @@ import {
   Minimize2,
   MonitorSmartphone,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Timer,
   Trash2,
@@ -36,7 +37,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip } from "@/components/ui/tooltip";
-import { RETENTION_DAYS } from "@/lib/transfer/constants";
+import { RETENTION_DAYS, TRASH_DAYS } from "@/lib/transfer/constants";
 import { formatBytes } from "@/lib/tools/files";
 import { cn, plural } from "@/lib/utils";
 import { ToolHeader } from "../tool-header";
@@ -590,6 +591,76 @@ function FilesList({ files, onOpenChat, onDelete }) {
   );
 }
 
+function DeletedList({ chats, onRestore, onDeleteForever }) {
+  const now = useNow();
+  const [busy, setBusy] = useState(null);
+  if (!chats) return <Skeleton className="mt-4 h-40 rounded-2xl" />;
+  if (!chats.length) {
+    return (
+      <div className="mt-4 rounded-2xl bg-surface px-6 py-14 text-center shadow-card">
+        <p className="text-sm font-medium">Nothing deleted</p>
+        <p className="mt-0.5 text-xs text-ink-3">
+          Chats you delete wait here for {TRASH_DAYS} days, so you can bring
+          them back.
+        </p>
+      </div>
+    );
+  }
+
+  const restore = async (chat) => {
+    setBusy(chat.id);
+    await onRestore(chat);
+    setBusy(null);
+  };
+
+  return (
+    <>
+      <p className="mt-4 text-xs text-ink-3">
+        Restore puts a chat back with every message and file in it. Chats here
+        are removed for good after {TRASH_DAYS} days.
+      </p>
+      <ul className="mt-2 grid gap-2">
+        {chats.map((chat) => (
+          <li
+            key={chat.id}
+            className="flex animate-rise items-center gap-3 rounded-2xl bg-surface p-3 shadow-card"
+          >
+            <Avatar name={chat.name} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{chat.name}</p>
+              <p className="truncate text-xs text-ink-3 tabular-nums">
+                {plural(chat.messages, "message")} ·{" "}
+                {plural(chat.files, "file")}
+                {chat.bytes > 0 && ` (${formatBytes(chat.bytes)})`} · deleted{" "}
+                {timeAgo(chat.deletedAt, now)} · gone in{" "}
+                {countdown(chat.purgeAt - now)}
+              </p>
+            </div>
+            <Tooltip label="Delete for good">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onDeleteForever(chat)}
+                aria-label={`Delete the chat with ${chat.name} for good`}
+              >
+                <Trash2 />
+              </Button>
+            </Tooltip>
+            <Button
+              variant="primary"
+              pending={busy === chat.id}
+              onClick={() => restore(chat)}
+            >
+              <RotateCcw />
+              Restore
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 export function FileTransfer({
   linkKey,
   autoDelete: initialAutoDelete = true,
@@ -600,7 +671,7 @@ export function FileTransfer({
   const [autoDelete, setAutoDelete] = useState(initialAutoDelete);
   const [tab, setTab] = useState("chats");
   const [selected, setSelected] = useState(initialChat || null);
-  const [data, setData] = useState({ chats: null, files: null });
+  const [data, setData] = useState({ chats: null, files: null, deleted: null });
   const [confirm, setConfirm] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const seen = useRef(null);
@@ -644,7 +715,11 @@ export function FileTransfer({
           }
         });
       }
-      seen.current = new Map(next.chats.map((chat) => [chat.id, chat.unread]));
+      // Deleted chats count as seen, so restoring one does not announce it as new.
+      seen.current = new Map([
+        ...(next.deleted ?? []).map((chat) => [chat.id, Infinity]),
+        ...next.chats.map((chat) => [chat.id, chat.unread]),
+      ]);
       setData(next);
     } catch (error) {
       if (error.status === 401) return toast.error(error.message);
@@ -733,6 +808,18 @@ export function FileTransfer({
     }
   };
 
+  const restoreChat = async (chat) => {
+    try {
+      await call(`/api/transfer/admin/chats/${chat.id}/restore`, {});
+      toast.success(`Chat with ${chat.name} restored`, {
+        action: { label: "Open", onClick: () => select(chat.id) },
+      });
+      await load();
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
   const runDelete = async () => {
     const target = confirm;
     setConfirm(null);
@@ -745,7 +832,17 @@ export function FileTransfer({
           setExpanded(false);
           setSelected(null);
         }
-        toast.success("Chat deleted");
+        toast.success("Chat deleted", {
+          description: `Restore it from Deleted within ${TRASH_DAYS} days.`,
+          duration: 15000,
+          action: { label: "Undo", onClick: () => restoreChat(target.item) },
+        });
+      } else if (target.kind === "forever") {
+        await call(
+          `/api/transfer/admin/chats/${target.item.id}?forever=1`,
+          { method: "DELETE" },
+        );
+        toast.success("Chat deleted for good");
       } else {
         await call(`/api/transfer/files/${target.item.id}`, {
           method: "DELETE",
@@ -788,11 +885,18 @@ export function FileTransfer({
           options={[
             { value: "chats", label: "Chats", count: data.chats?.length },
             { value: "files", label: "Files", count: data.files?.length },
+            { value: "deleted", label: "Deleted", count: data.deleted?.length },
           ]}
         />
       </div>
 
-      {tab === "files" ? (
+      {tab === "deleted" ? (
+        <DeletedList
+          chats={data.deleted}
+          onRestore={restoreChat}
+          onDeleteForever={(chat) => setConfirm({ kind: "forever", item: chat })}
+        />
+      ) : tab === "files" ? (
         <FilesList
           files={data.files}
           onOpenChat={select}
@@ -867,7 +971,8 @@ export function FileTransfer({
                   <div className="flex h-full flex-col items-center justify-center p-6 text-center">
                     <p className="text-sm font-medium">This chat is gone</p>
                     <p className="mt-0.5 text-xs text-ink-3">
-                      It was deleted or passed its {RETENTION}.
+                      It was deleted or passed its {RETENTION}. Deleted chats
+                      can be restored from the Deleted tab.
                     </p>
                     <Button
                       variant="soft"
@@ -911,12 +1016,16 @@ export function FileTransfer({
         title={
           confirm?.kind === "chat"
             ? `Delete the chat with ${confirm.item.name}?`
-            : `Delete ${confirm?.item.name}?`
+            : confirm?.kind === "forever"
+              ? `Delete the chat with ${confirm.item.name} for good?`
+              : `Delete ${confirm?.item.name}?`
         }
         description={
           confirm?.kind === "chat"
-            ? "Every message and file in it is removed for both of you. This cannot be undone."
-            : "It is removed for both of you. This cannot be undone."
+            ? `It disappears for both of you and moves to Deleted, where you can restore it for ${TRASH_DAYS} days.`
+            : confirm?.kind === "forever"
+              ? "Every message and file in it is removed. This cannot be undone."
+              : "It is removed for both of you. This cannot be undone."
         }
         onConfirm={runDelete}
       />

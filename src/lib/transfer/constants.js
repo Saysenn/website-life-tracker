@@ -1,5 +1,8 @@
 export const RETENTION_DAYS = 7;
 export const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+/** Deleted chats wait this long in Recently deleted before they are gone for good. */
+export const TRASH_DAYS = 30;
+export const TRASH_MS = TRASH_DAYS * 24 * 60 * 60 * 1000;
 export const CHUNK_SIZE = 3 * 1024 * 1024;
 export const MAX_FILE_BYTES = 2 * 1024 ** 3;
 export const GUEST_QUOTA_BYTES = 3 * 1024 ** 3;

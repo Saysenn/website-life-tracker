@@ -60,7 +60,7 @@ export async function guestChat() {
   const [chatId, token] = raw.split(".");
   if (!chatId || !token) return null;
   const chat = await db.query.transferChats.findFirst({ where: eq(transferChats.id, chatId) });
-  if (!chat || !sameText(chat.tokenHash, hashToken(token))) return null;
+  if (!chat || chat.deletedAt || !sameText(chat.tokenHash, hashToken(token))) return null;
   const expires = expiryOf(chat.createdAt, await autoDeleteOn());
   if (expires && expires < Date.now()) return null;
   return chat;

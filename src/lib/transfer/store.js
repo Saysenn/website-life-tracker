@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gt, inArray, lt, lte, max, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, max, sql, sum } from "drizzle-orm";
 import { db } from "@/db";
 import { transferChats, transferChunks, transferFiles, transferLink, transferMessages } from "@/db/schema";
 import { HttpError } from "./access";
@@ -11,6 +11,7 @@ import {
   MAX_NAME,
   ONLINE_MS,
   RETENTION_MS,
+  TRASH_MS,
   TYPING_MS,
 } from "./constants";
 import { hashToken, randomId, sameText, seal, sealText, selfToken, unseal, unsealText } from "./crypto";
@@ -20,6 +21,7 @@ const STARTS_PER_HOUR = 5;
 const MESSAGES_PER_MINUTE = 30;
 const OPEN_UPLOADS = 10;
 
+const live = isNull(transferChats.deletedAt);
 const peerOf = (role) => (role === "admin" ? "guest" : "admin");
 const expiresOf = (chat, on) => expiryOf(chat.createdAt, on);
 
@@ -75,7 +77,10 @@ export async function setAutoDelete(on) {
   if (on) await purgeExpired({ force: true });
 }
 
-/* Cleanup: with auto-delete on, a chat and everything in it is deleted 7 days after it started. */
+/*
+ * Cleanup: with auto-delete on, a chat and everything in it is deleted 7 days after it started.
+ * A chat the admin deleted sits in Recently deleted for 30 days, then goes for good.
+ */
 
 let lastPurge = 0;
 
@@ -91,6 +96,12 @@ export async function purgeExpired({ force = false } = {}) {
       .where(lt(transferChats.createdAt, now - RETENTION_MS));
     if (expired.length) await deleteChats(expired.map((chat) => chat.id));
   }
+
+  const trashed = await db
+    .select({ id: transferChats.id })
+    .from(transferChats)
+    .where(lt(transferChats.deletedAt, now - TRASH_MS));
+  if (trashed.length) await deleteChats(trashed.map((chat) => chat.id));
 
   const stale = await db
     .select({ id: transferFiles.id })
@@ -112,17 +123,40 @@ async function deleteChats(ids) {
   await db.delete(transferChats).where(inArray(transferChats.id, ids));
 }
 
+/** Moves a chat to Recently deleted. Nothing is removed until it has been there 30 days. */
 export async function deleteChat(id) {
-  await deleteChats([id]);
+  await db
+    .update(transferChats)
+    .set({ deletedAt: Date.now(), adminTypingAt: null, guestTypingAt: null })
+    .where(and(eq(transferChats.id, String(id)), live));
+}
+
+/** Brings a chat back from Recently deleted, exactly as it was. */
+export async function restoreChat(id) {
+  const chat = await findChat(id, { deleted: true });
+  await db.update(transferChats).set({ deletedAt: null }).where(eq(transferChats.id, chat.id));
+  return chat;
+}
+
+/** Removes a chat in Recently deleted for good, with every message and file in it. */
+export async function deleteChatForever(id) {
+  const chat = await findChat(id, { deleted: true });
+  await deleteChats([chat.id]);
 }
 
 /* Chats */
 
-export async function getChat(id) {
-  const chat = await db.query.transferChats.findFirst({ where: eq(transferChats.id, String(id)) });
+async function findChat(id, { deleted = false } = {}) {
+  const chat = await db.query.transferChats.findFirst({
+    where: and(eq(transferChats.id, String(id)), deleted ? isNotNull(transferChats.deletedAt) : live),
+  });
   const expires = chat && expiresOf(chat, await autoDeleteOn());
   if (!chat || (expires && expires < Date.now())) throw new HttpError(404, "This chat no longer exists.");
   return chat;
+}
+
+export async function getChat(id) {
+  return findChat(id);
 }
 
 export async function startChat({ name, ip, location, userAgent }) {
@@ -161,7 +195,7 @@ export async function agentChat() {
   const now = Date.now();
   const fresh = (await autoDeleteOn()) ? gt(transferChats.createdAt, now - RETENTION_MS) : undefined;
   const existing = await db.query.transferChats.findFirst({
-    where: and(eq(transferChats.ip, "agent"), fresh),
+    where: and(eq(transferChats.ip, "agent"), live, fresh),
     orderBy: desc(transferChats.createdAt),
   });
   if (existing) return { chat: existing, created: false };
@@ -195,7 +229,7 @@ export async function openSelfChat({ ip, location, userAgent }) {
   const fresh = (await autoDeleteOn()) ? gt(transferChats.createdAt, now - RETENTION_MS) : undefined;
   const device = { location: [ip, location].filter(Boolean).join(" · ") || null, userAgent };
   const existing = await db.query.transferChats.findFirst({
-    where: and(eq(transferChats.ip, SELF_IP), fresh),
+    where: and(eq(transferChats.ip, SELF_IP), live, fresh),
     orderBy: desc(transferChats.createdAt),
   });
   if (existing) {
@@ -560,6 +594,7 @@ export async function listChats() {
     .select({ chat: transferChats, unread: unread.total })
     .from(transferChats)
     .leftJoin(unread, eq(unread.chatId, transferChats.id))
+    .where(live)
     .orderBy(desc(transferChats.activeAt));
 
   const ids = chats.map((row) => row.chat.id);
@@ -594,7 +629,7 @@ export async function listChats() {
 /** Finished files for a zip, oldest first: one chat, or every chat when chatId is null. */
 export async function readyFiles(chatId) {
   const now = Date.now();
-  const where = [eq(transferFiles.status, "ready")];
+  const where = [eq(transferFiles.status, "ready"), live];
   if (await autoDeleteOn()) where.push(gt(transferFiles.expiresAt, now));
   if (chatId) where.push(eq(transferFiles.chatId, chatId));
   const rows = await db
@@ -612,7 +647,7 @@ export async function listFiles() {
     .select({ file: transferFiles, chatName: transferChats.name })
     .from(transferFiles)
     .innerJoin(transferChats, eq(transferChats.id, transferFiles.chatId))
-    .where(eq(transferFiles.status, "ready"))
+    .where(and(eq(transferFiles.status, "ready"), live))
     .orderBy(desc(transferFiles.createdAt));
   return rows.map(({ file, chatName }) => ({
     ...fileView(file),
@@ -621,4 +656,44 @@ export async function listFiles() {
     createdAt: file.createdAt,
     expiresAt: on ? file.expiresAt : null,
   }));
+}
+
+/** Chats in Recently deleted, most recently deleted first, with when each one goes for good. */
+export async function listDeletedChats() {
+  const chats = await db
+    .select()
+    .from(transferChats)
+    .where(isNotNull(transferChats.deletedAt))
+    .orderBy(desc(transferChats.deletedAt));
+  if (!chats.length) return [];
+
+  const ids = chats.map((chat) => chat.id);
+  const [messages, files] = await Promise.all([
+    db
+      .select({ chatId: transferMessages.chatId, total: count() })
+      .from(transferMessages)
+      .where(inArray(transferMessages.chatId, ids))
+      .groupBy(transferMessages.chatId),
+    db
+      .select({ chatId: transferFiles.chatId, total: count(), bytes: sum(transferFiles.size) })
+      .from(transferFiles)
+      .where(and(inArray(transferFiles.chatId, ids), eq(transferFiles.status, "ready")))
+      .groupBy(transferFiles.chatId),
+  ]);
+  const messagesBy = new Map(messages.map((row) => [row.chatId, row.total]));
+  const filesBy = new Map(files.map((row) => [row.chatId, row]));
+
+  const on = await autoDeleteOn();
+  return chats.map((chat) => {
+    const expires = expiresOf(chat, on);
+    const purge = chat.deletedAt + TRASH_MS;
+    return {
+      ...chatView(chat, "admin", on),
+      deletedAt: chat.deletedAt,
+      purgeAt: expires ? Math.min(expires, purge) : purge,
+      messages: messagesBy.get(chat.id) ?? 0,
+      files: filesBy.get(chat.id)?.total ?? 0,
+      bytes: Number(filesBy.get(chat.id)?.bytes ?? 0),
+    };
+  });
 }

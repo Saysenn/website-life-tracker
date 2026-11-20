@@ -2,7 +2,7 @@ import "server-only";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { HttpError } from "./access";
-import { HOST_NAME, INLINE_TYPES, MAX_AGENT_MESSAGE } from "./constants";
+import { HOST_NAME, INLINE_TYPES, MAX_AGENT_MESSAGE, TRASH_DAYS } from "./constants";
 import { sameText } from "./crypto";
 import { notifyAdmin } from "./notify";
 import { scrubbedFile } from "./scrub";
@@ -17,6 +17,7 @@ import {
   listFiles,
   postMessage,
   purgeExpired,
+  restoreChat,
   setBlocked,
   syncChat,
 } from "./store";
@@ -291,12 +292,22 @@ export const TOOLS = [
   },
   {
     name: "delete_chat",
-    description: "Permanently deletes a chat with every message and file in it, for both sides.",
+    description:
+      "Deletes a chat for both sides. It moves to Recently deleted, where restore_chat can bring it back for 30 days.",
     inputSchema: { type: "object", properties: { chat_id: chatId }, required: ["chat_id"] },
     run: async ({ chat_id }) => {
       await getChat(chat_id);
       await deleteChat(chat_id);
-      return { deleted: true };
+      return { deleted: true, restorable_days: TRASH_DAYS };
+    },
+  },
+  {
+    name: "restore_chat",
+    description: "Brings a deleted chat back from Recently deleted with every message and file in it.",
+    inputSchema: { type: "object", properties: { chat_id: chatId }, required: ["chat_id"] },
+    run: async ({ chat_id }) => {
+      await restoreChat(chat_id);
+      return { restored: true };
     },
   },
 ];

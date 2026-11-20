@@ -99,6 +99,13 @@
       "when": 1794327296138,
       "tag": "0013_transfer_auto_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1795181551545,
+      "tag": "0014_transfer_trash",
+      "breakpoints": true
     }
   ]
 }
