@@ -14,6 +14,20 @@ export const TOOLS = [
     tags: ["Edit text", "Sign", "Pages"],
   },
   {
+    slug: "screen-recorder",
+    title: "Screen recorder",
+    summary: "Record your screen, a window, a tab or a dragged area with sound, mic, webcam overlay and logo. Pause, screenshots, hotkeys and a floating bar.",
+    icon: "screen",
+    tags: ["Area", "Webcam", "MP4"],
+  },
+  {
+    slug: "voice-recorder",
+    title: "Voice recorder",
+    summary: "Record your voice or drop in audio, then strip background noise, hum and hiss with AI and download a clean WAV or MP3.",
+    icon: "mic",
+    tags: ["AI noise removal", "WAV · MP3"],
+  },
+  {
     slug: "video-to-images",
     title: "Video to images & text",
     summary: "Extract frames as JPG/PNG/WEBP, transcribe what's said into text or subtitles, and read on-screen text.",
