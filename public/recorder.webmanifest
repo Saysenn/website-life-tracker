@@ -1,0 +1,20 @@
+{
+  "id": "/tools/screen-recorder",
+  "name": "Screen Recorder",
+  "short_name": "Recorder",
+  "description": "Record your screen, a window, a tab, an area or your webcam — with sound, webcam bubble and screenshots.",
+  "start_url": "/tools/screen-recorder",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3eee6",
+  "theme_color": "#f3eee6",
+  "icons": [
+    { "src": "/recorder-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/recorder-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/recorder-icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Screen recorder", "url": "/tools/screen-recorder", "icons": [{ "src": "/recorder-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Voice recorder", "url": "/tools/voice-recorder", "icons": [{ "src": "/recorder-icon-192.png", "sizes": "192x192" }] }
+  ]
+}

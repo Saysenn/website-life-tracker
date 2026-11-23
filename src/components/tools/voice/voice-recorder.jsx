@@ -10,6 +10,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useStoredState } from "@/hooks/use-stored-state";
 import { baseName, downloadBlob, formatBytes } from "@/lib/tools/files";
 import { fmtClock, listMedia, mediaBlob, newId, saveMedia, stamp } from "@/lib/tools/media-store";
+import { recoverJournals, startJournal } from "@/lib/tools/recording-journal";
 import { extensionFor, listDevices, pickType } from "@/lib/tools/screen/capture";
 import { Cancelled, Cleaner, decodeToMono, encodeMp3, encodeWav, PRESETS, SAMPLE_RATE } from "@/lib/tools/voice/clean";
 import { cn } from "@/lib/utils";
@@ -82,17 +83,30 @@ function useMicRecorder({ micId, browserFilter, onDone }) {
     ctx.createMediaStreamSource(stream).connect(node);
     const type = pickType("webm", false);
     const recorder = new MediaRecorder(stream, { mimeType: type || undefined, audioBitsPerSecond: 256000 });
-    const s = { stream, ctx, recorder, chunks: [], startedAt: performance.now(), pausedTotal: 0, pausedAt: null };
-    recorder.ondataavailable = (event) => event.data.size && s.chunks.push(event.data);
-    recorder.onstop = () => {
+    const mime = (recorder.mimeType || type || "audio/webm").split(";")[0];
+    const name = `Voice ${stamp()}.${extensionFor(mime)}`;
+    const s = { stream, ctx, recorder, name, chunks: [], startedAt: performance.now(), pausedTotal: 0, pausedAt: null };
+    // Every chunk is also kept in browser storage as it arrives, so a refresh or crash can't lose the take.
+    startJournal({ tool: "voice", kind: "audio", name, mime })
+      .then((journal) => {
+        s.journal = journal;
+        for (const chunk of s.chunks) journal?.append(chunk, timeOf(s));
+      })
+      .catch(() => {});
+    recorder.ondataavailable = (event) => {
+      if (!event.data.size) return;
+      s.chunks.push(event.data);
+      s.journal?.append(event.data, timeOf(s));
+    };
+    recorder.onstop = async () => {
       const duration = timeOf(s) / 1000;
-      const mime = (recorder.mimeType || type || "audio/webm").split(";")[0];
       release(s);
       setState("idle");
       setElapsed(0);
       const blob = new Blob(s.chunks, { type: mime });
-      if (blob.size) done.current?.(blob, duration, extensionFor(mime));
+      if (blob.size) await done.current?.(blob, duration, name);
       else toast.error("Nothing was recorded");
+      s.journal?.discard();
     };
     recorder.start(500);
     s.timer = setInterval(() => setElapsed(timeOf(s)), 200);
@@ -126,6 +140,23 @@ function useMicRecorder({ micId, browserFilter, onDone }) {
     [],
   );
 
+  // Warn before leaving mid-recording; if they leave anyway, hand over the last bit so it reaches storage.
+  const active = state !== "idle";
+  useEffect(() => {
+    if (!active) return;
+    const onUnload = (event) => event.preventDefault();
+    const onHide = () => {
+      const recorder = session.current?.recorder;
+      if (recorder?.state === "recording") recorder.requestData();
+    };
+    window.addEventListener("beforeunload", onUnload);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.removeEventListener("beforeunload", onUnload);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, [active]);
+
   return { state, elapsed, analyser, start, stop, togglePause };
 }
 
@@ -147,7 +178,16 @@ export function VoiceRecorder() {
   const runId = useRef(0);
 
   useEffect(() => {
-    listMedia("voice").then(setItems).catch(() => {});
+    recoverJournals("voice", saveMedia)
+      .then((recovered) => {
+        if (recovered.length) {
+          toast.success(recovered.length === 1 ? "Recovered a recording that was cut off" : `Recovered ${recovered.length} recordings that were cut off`, {
+            description: recovered.length === 1 ? `${recovered[0].name} · ${fmtClock(recovered[0].duration)} — press Clean on it below` : "They're in your recordings below.",
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => listMedia("voice").then(setItems).catch(() => {}));
     const refresh = () => listDevices().then((devices) => setMics(devices.mics));
     refresh();
     navigator.mediaDevices?.addEventListener?.("devicechange", refresh);
@@ -156,7 +196,7 @@ export function VoiceRecorder() {
 
   const addItem = useCallback((item) => {
     setItems((list) => [item, ...list]);
-    saveMedia(item).catch(() => toast.error("Browser storage is full — download your files to keep them"));
+    return saveMedia(item).catch(() => toast.error("Browser storage is full — download your files to keep them"));
   }, []);
 
   const load = useCallback(async (blob, name, duration) => {
@@ -184,10 +224,9 @@ export function VoiceRecorder() {
   const mic = useMicRecorder({
     micId: cfg.micId,
     browserFilter: cfg.browserFilter,
-    onDone: (blob, duration, ext) => {
-      const name = `Voice ${stamp()}.${ext}`;
-      addItem({ id: newId(), tool: "voice", kind: "audio", name, mime: blob.type, size: blob.size, duration, createdAt: Date.now(), blob, badge: "Original" });
+    onDone: (blob, duration, name) => {
       load(blob, name, duration);
+      return addItem({ id: newId(), tool: "voice", kind: "audio", name, mime: blob.type, size: blob.size, duration, createdAt: Date.now(), blob, badge: "Original" });
     },
   });
 

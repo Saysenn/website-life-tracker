@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { downloadBlob } from "@/lib/tools/files";
 import { newId, saveMedia, stamp, thumbnail } from "@/lib/tools/media-store";
+import { startJournal } from "@/lib/tools/recording-journal";
 import {
   AudioMixer,
   bitrateFor,
   canCaptureScreen,
+  CAM_SCALES,
   canvasBlob,
   Compositor,
   extensionFor,
@@ -23,7 +25,19 @@ import {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const camOptions = (cfg) => ({ position: cfg.camPosition, size: cfg.camSize, shape: cfg.camShape, mirror: cfg.camMirror });
+export const camOptions = (cfg) => ({
+  position: cfg.camPosition,
+  scale: cfg.camScale ?? CAM_SCALES[cfg.camSize] ?? CAM_SCALES.m,
+  shape: cfg.camShape === "rect" ? "wide" : cfg.camShape,
+  mirror: cfg.camMirror,
+  zoom: cfg.camZoom,
+  filter: cfg.camFilter,
+  border: cfg.camBorder,
+  borderColor: cfg.camBorderColor,
+  borderWidth: cfg.camBorderWidth,
+  shadow: cfg.camShadow,
+  label: cfg.camLabel,
+});
 export const markOptions = (cfg, logo) => ({
   kind: cfg.mark === "image" && !logo ? "off" : cfg.mark,
   text: cfg.markText,
@@ -150,6 +164,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
         if (s.writeError) toast.error("Couldn't keep writing to the folder — saved the part still in memory");
       }
       if (!blob?.size && !handle) {
+        s.journal?.discard();
         setPhase("idle");
         return toast.error("Nothing was recorded");
       }
@@ -175,6 +190,8 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
         if (blob) downloadBlob(blob, s.name);
         toast.error("Browser storage is full — the recording was downloaded instead");
       }
+      // Saved for good, so the crash-safe copy can go.
+      s.journal?.discard();
       if (blob && !handle) {
         const written = await writeToFolder(dir, s.name, blob);
         if (!written && cfg.autoDownload) downloadBlob(blob, s.name);
@@ -215,6 +232,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       if (!s.thumb && elapsed > 700) {
         const frame = currentFrame(s);
         if (frame) s.thumb = thumbnail(frame.image, frame.width, frame.height);
+        if (s.thumb) s.journal?.update({ thumb: s.thumb });
       }
       if (cfg.repeat && s.hasVideo && !s.pausedAt && elapsed - s.lastShot >= cfg.repeatSeconds * 1000) {
         s.lastShot = elapsed;
@@ -285,7 +303,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       setPreview(videoTrack ? new MediaStream([s.compositor ? videoTrack : main]) : null);
       s.hasVideo = Boolean(videoTrack);
       s.type = s.hasVideo ? type : pickType(cfg.format, false);
-      setInfo({ width: s.width, height: s.height, fps: cfg.fps, type: s.type, composite: Boolean(composite) });
+      setInfo({ width: s.width, height: s.height, fps: cfg.fps, type: s.type, composite: Boolean(composite), camera: Boolean(overlayCamera && s.compositor) });
 
       for (let n = cfg.countdown; n > 0; n -= 1) {
         setPhase("countdown");
@@ -317,6 +335,21 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       s.bytes = 0;
       s.writeChain = Promise.resolve();
 
+      // A copy of every chunk goes to browser storage as it arrives, so a refresh or crash can't lose the recording.
+      // (A folder file is only committed when it's closed, so it needs this too.)
+      s.journal = await startJournal({
+        tool: "screen",
+        kind: s.hasVideo ? "video" : "audio",
+        name: s.name,
+        mime: s.type.split(";")[0] || (s.hasVideo ? "video/webm" : "audio/webm"),
+        width: s.width,
+        height: s.height,
+      }).catch(() => null);
+      if (s.cancelled) {
+        s.journal?.discard();
+        return;
+      }
+
       if (dir?.handle && dir.permission === "granted") {
         try {
           s.fileHandle = await dir.handle.getFileHandle(s.name, { create: true });
@@ -329,6 +362,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       recorder.ondataavailable = (event) => {
         if (!event.data.size) return;
         s.bytes += event.data.size;
+        s.journal?.append(event.data, elapsedOf(s));
         if (s.writer && !s.writeError) {
           s.writeChain = s.writeChain
             .then(() => s.writer.write(event.data))
@@ -482,7 +516,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
     const compositor = session.current?.compositor;
     if (!compositor) return;
     compositor.update({
-      cam: compositor.camera ? camOptions(settings) : null,
+      cam: compositor.camera && settings.cam ? camOptions(settings) : null,
       mark: compositor.mark || settings.mark !== "off" ? markOptions(settings, logo) : null,
     });
   }, [settings, logo]);
@@ -493,10 +527,17 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
     if (!active) return;
     const original = document.title;
     const onUnload = (event) => event.preventDefault();
+    // Leaving anyway: hand over the last part so it reaches the crash-safe copy.
+    const onHide = () => {
+      const recorder = session.current?.recorder;
+      if (recorder?.state === "recording") recorder.requestData();
+    };
     window.addEventListener("beforeunload", onUnload);
+    window.addEventListener("pagehide", onHide);
     return () => {
       document.title = original;
       window.removeEventListener("beforeunload", onUnload);
+      window.removeEventListener("pagehide", onHide);
     };
   }, [active]);
 

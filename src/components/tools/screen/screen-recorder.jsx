@@ -13,6 +13,7 @@ import {
   Monitor,
   PanelsTopLeft,
   PictureInPicture2,
+  Rocket,
   Stamp,
   Timer,
   Volume2,
@@ -26,12 +27,15 @@ import { Segmented } from "@/components/ui/segmented";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useStoredState } from "@/hooks/use-stored-state";
 import { formatBytes } from "@/lib/tools/files";
-import { fmtClock, getSetting, listMedia, setSetting } from "@/lib/tools/media-store";
-import { canCaptureScreen, extensionFor, formatSupport, listDevices } from "@/lib/tools/screen/capture";
+import { fmtClock, getSetting, listMedia, saveMedia, setSetting } from "@/lib/tools/media-store";
+import { recoverJournals } from "@/lib/tools/recording-journal";
+import { CAM_SCALES, canCaptureScreen, extensionFor, formatSupport, listDevices } from "@/lib/tools/screen/capture";
+import { BRIDGE_TAG } from "@/lib/tools/screen/launcher";
 import { cn } from "@/lib/utils";
 import { MediaLibrary } from "../media-library";
 import { ToolHeader } from "../tool-header";
 import { AreaPicker, ASPECTS, DEFAULT_AREA, fitAspect } from "./area-picker";
+import { LaunchPanel } from "./launch-panel";
 import { canPopOut, openPopOut, PopOut } from "./mini-bar";
 import { AudioPanel, HotkeysPanel, ImagePanel, LogoPanel, Meter, OutputPanel, TOUCH_SEGMENTS, VideoPanel, WebcamPanel } from "./panels";
 import { useScreenRecorder } from "./use-screen-recorder";
@@ -55,9 +59,16 @@ const DEFAULTS = {
   cam: false,
   camId: "",
   camPosition: "bottom-right",
-  camSize: "m",
+  camScale: CAM_SCALES.s,
   camShape: "circle",
   camMirror: true,
+  camZoom: 1,
+  camFilter: "none",
+  camBorder: "solid",
+  camBorderColor: "#ffffff",
+  camBorderWidth: "thin",
+  camShadow: true,
+  camLabel: "",
   mark: "off",
   markText: "",
   markPosition: "bottom-right",
@@ -97,6 +108,7 @@ const TABS = [
   { value: "image", label: "Image", icon: ImageIcon },
   { value: "output", label: "Output", icon: FolderOpen },
   { value: "hotkeys", label: "Hotkeys", icon: Keyboard },
+  { value: "launch", label: "Launch", icon: Rocket },
 ];
 
 const noop = () => () => {};
@@ -124,7 +136,12 @@ function LivePreview({ stream, countdown }) {
 
 export function ScreenRecorder() {
   const [stored, setStored] = useStoredState("tools:screen-recorder", DEFAULTS);
-  const cfg = useMemo(() => ({ ...DEFAULTS, ...stored }), [stored]);
+  const cfg = useMemo(() => {
+    const merged = { ...DEFAULTS, ...stored };
+    // Settings saved before the size slider existed kept a size name instead.
+    if (stored?.camScale == null && stored?.camSize) merged.camScale = CAM_SCALES[stored.camSize] ?? DEFAULTS.camScale;
+    return merged;
+  }, [stored]);
   const set = useCallback((patch) => setStored((prev) => ({ ...DEFAULTS, ...prev, ...patch })), [setStored]);
   const support = useSyncExternalStore(noop, getSupport, () => serverSupport);
   const isMac = useSyncExternalStore(noop, getIsMac, () => false);
@@ -136,6 +153,7 @@ export function ScreenRecorder() {
   const [logo, setLogo] = useState(null);
   const [area, setArea] = useState(cfg.area ?? DEFAULT_AREA);
   const [pip, setPip] = useState(null);
+  const [extension, setExtension] = useState(null);
 
   const onSaved = useCallback((item) => setItems((list) => [item, ...list.filter((entry) => entry.id !== item.id)]), []);
   const folderState = useMemo(() => ({ ...folder, supported: support.folder }), [folder, support.folder]);
@@ -150,7 +168,17 @@ export function ScreenRecorder() {
   }, [support.screen, cfg.mode, set]);
 
   useEffect(() => {
-    listMedia("screen").then(setItems).catch(() => {});
+    // Recordings cut off by a refresh, a closed tab or a crash are rebuilt from their crash-safe copy first.
+    recoverJournals("screen", saveMedia)
+      .then((recovered) => {
+        if (recovered.length) {
+          toast.success(recovered.length === 1 ? "Recovered a recording that was cut off" : `Recovered ${recovered.length} recordings that were cut off`, {
+            description: recovered.length === 1 ? `${recovered[0].name} · ${fmtClock(recovered[0].duration)}` : "They're in your recordings below.",
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => listMedia("screen").then(setItems).catch(() => {}));
     getSetting("screen:folder")
       .then(async (handle) => {
         if (!handle) return;
@@ -222,8 +250,21 @@ export function ScreenRecorder() {
     setArea((current) => fitAspect(current, areaAspect, size?.width, size?.height));
   };
 
+  const attachPip = useCallback((win) => {
+    win.addEventListener("pagehide", () => setPip(null), { once: true });
+    setPip(win);
+  }, []);
+
+  // The floating bar can only open straight from a click or key press, so it opens together with the share
+  // picker instead of after it. The picker is asked for first: opening the bar uses up the click.
+  const startWithBar = () => {
+    const started = rec.record();
+    if (cfg.miniBar && support.popOut && !pip) openPopOut().then(attachPip).catch(() => {});
+    return started;
+  };
+
   const primary = () => {
-    if (phase === "idle") return rec.record();
+    if (phase === "idle") return startWithBar();
     if (phase === "selecting") {
       set({ area });
       return rec.record({ area });
@@ -233,10 +274,13 @@ export function ScreenRecorder() {
 
   const shot = () => rec.screenshot({ area: phase === "selecting" ? area : undefined });
 
+  const toggleMic = () => set({ mic: !cfg.mic });
+  const toggleCam = () => set({ cam: !cfg.cam });
+
   // Hotkeys: Alt/Option + R record/stop, P pause, S screenshot.
   const keys = useRef({});
   useEffect(() => {
-    keys.current = { primary, pause: rec.togglePause, shot, enabled: cfg.hotkeys };
+    keys.current = { primary, pause: rec.togglePause, shot, mic: toggleMic, cam: toggleCam, stop: rec.stop, enabled: cfg.hotkeys };
   });
   const onKeyDown = useCallback((event) => {
     const { enabled, primary: go, pause, shot: snap } = keys.current;
@@ -254,31 +298,41 @@ export function ScreenRecorder() {
 
   const popOut = useCallback(async () => {
     try {
-      const win = await openPopOut();
-      win.addEventListener("pagehide", () => setPip(null), { once: true });
-      setPip(win);
+      attachPip(await openPopOut());
     } catch {
       toast("Click the pop-out button to open the floating recording bar");
     }
+  }, [attachPip]);
+
+  // Close the floating bar once the recording is saved (or the picker was cancelled).
+  useEffect(() => {
+    if (phase === "idle") pip?.close();
+  }, [phase, pip]);
+
+  // The browser extension: commands from its toolbar button and shortcuts come in, live state goes out.
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (data?.[BRIDGE_TAG] === "extension") setExtension(data.version || "1");
+      if (data?.[BRIDGE_TAG] !== "command") return;
+      const k = keys.current;
+      const run = { record: k.primary, pause: k.pause, screenshot: k.shot, mic: k.mic, cam: k.cam, stop: k.stop }[data.action];
+      run?.();
+    };
+    window.addEventListener("message", onMessage);
+    window.postMessage({ [BRIDGE_TAG]: "page-ready" }, window.location.origin);
+    return () => window.removeEventListener("message", onMessage);
   }, []);
 
-  // Open the floating bar as recording starts (where allowed), and close it when done.
-  const autoOpened = useRef(false);
+  const second = Math.floor(rec.clock.elapsed / 1000);
   useEffect(() => {
-    if (live && cfg.miniBar && support.popOut && !pip && !autoOpened.current) {
-      autoOpened.current = true;
-      openPopOut()
-        .then((win) => {
-          win.addEventListener("pagehide", () => setPip(null), { once: true });
-          setPip(win);
-        })
-        .catch(() => {});
-    }
-    if (phase === "idle") {
-      autoOpened.current = false;
-      pip?.close();
-    }
-  }, [live, phase, cfg.miniBar, support.popOut, pip]);
+    if (!extension) return;
+    const state = { phase, elapsed: rec.clock.elapsed, bytes: rec.clock.bytes, countdown: rec.countdown, mic: cfg.mic, cam: cfg.cam };
+    window.postMessage({ [BRIDGE_TAG]: "state", state }, window.location.origin);
+    // Sent once a second (and on every change of state), not on every clock tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extension, phase, second, rec.countdown, cfg.mic, cfg.cam]);
 
   const mode = MODES.find((entry) => entry.value === cfg.mode) ?? MODES[0];
   const recLabel = phase === "selecting" ? "Record area" : live ? "Stop" : phase === "saving" ? "Saving" : "REC";
@@ -430,13 +484,16 @@ export function ScreenRecorder() {
             )}
             {tab === "video" && <VideoPanel cfg={cfg} set={set} support={support} locked={busy} />}
             {tab === "audio" && <AudioPanel cfg={cfg} set={set} devices={devices} onAllow={() => allowDevices("audio")} level={rec.level} live={live} locked={busy} />}
-            {tab === "webcam" && <WebcamPanel cfg={cfg} set={set} devices={devices} onAllow={() => allowDevices("video")} locked={busy} />}
+            {tab === "webcam" && (
+              <WebcamPanel cfg={cfg} set={set} devices={devices} onAllow={() => allowDevices("video")} locked={busy} live={live} liveCamera={Boolean(live && rec.info?.camera)} />
+            )}
             {tab === "logo" && <LogoPanel cfg={cfg} set={set} logoUrl={logo?.url} onLogo={changeLogo} />}
             {tab === "image" && <ImagePanel cfg={cfg} set={set} />}
             {tab === "output" && (
               <OutputPanel cfg={cfg} set={set} folder={folderState} onPickFolder={pickFolder} onReconnect={reconnectFolder} onForget={forgetFolder} count={items.length} />
             )}
             {tab === "hotkeys" && <HotkeysPanel cfg={cfg} set={set} isMac={isMac} />}
+            {tab === "launch" && <LaunchPanel extension={extension} isMac={isMac} />}
           </div>
         </div>
       </div>
@@ -457,6 +514,10 @@ export function ScreenRecorder() {
         onPause={rec.togglePause}
         onStop={rec.stop}
         onShot={shot}
+        mic={cfg.mic}
+        onMic={toggleMic}
+        cam={cfg.cam}
+        onCam={rec.info?.camera ? toggleCam : null}
       />
     </Page>
   );
@@ -550,7 +611,16 @@ function HomePanel({ cfg, set, mode, rec, area, setArea, onAspect, isMac, canSha
       <div className="flex flex-wrap items-center gap-1.5">
         <Toggle icon={Volume2} label="Computer sound" on={cfg.systemAudio && canShare} disabled={busy || cfg.mode === "webcam" || !canShare} onClick={() => set({ systemAudio: !cfg.systemAudio })} hint="Record what you hear from the shared screen or tab" />
         <Toggle icon={Mic} label={live && !cfg.mic ? "Mic muted" : "Microphone"} on={cfg.mic} disabled={phase === "acquiring" || phase === "saving"} onClick={() => set({ mic: !cfg.mic })} hint={live ? "Mute or unmute your mic" : "Record your voice"} />
-        {videoModes && <Toggle icon={Webcam} label="Webcam" on={cfg.cam} disabled={busy} onClick={() => set({ cam: !cfg.cam })} hint="Show your camera in a corner" />}
+        {videoModes && (
+          <Toggle
+            icon={Webcam}
+            label="Webcam"
+            on={cfg.cam}
+            disabled={busy && !(live && rec.info?.camera)}
+            onClick={() => set({ cam: !cfg.cam })}
+            hint={live ? "Hide or show your face" : "Show your camera in a corner — design it under Webcam"}
+          />
+        )}
         <Toggle
           icon={Timer}
           label={cfg.countdown ? `${cfg.countdown}s countdown` : "No countdown"}

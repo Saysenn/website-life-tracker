@@ -216,7 +216,155 @@ export class AudioMixer {
   }
 }
 
-const CAM_SIZES = { s: 0.16, m: 0.22, l: 0.3 };
+// ---- Webcam bubble ----
+
+/** Bubble width as a share of the video width. */
+export const CAM_SCALES = { xs: 0.08, s: 0.13, m: 0.19, l: 0.27, xl: 0.36 };
+/** Width ÷ height of each bubble shape. */
+const CAM_ASPECTS = { circle: 1, rounded: 1, square: 1, hexagon: 1, heart: 1, wide: 16 / 9, tall: 3 / 4 };
+export const CAM_FILTERS = {
+  none: "none",
+  bw: "grayscale(1) contrast(1.08)",
+  warm: "sepia(0.22) saturate(1.15) brightness(1.03)",
+  cool: "saturate(0.9) brightness(1.04) hue-rotate(-8deg)",
+  vivid: "saturate(1.45) contrast(1.08)",
+  soft: "brightness(1.07) contrast(0.92) saturate(0.95)",
+};
+export const RING_GRADIENT = ["#f9ce34", "#ee2a7b", "#6228d7"];
+
+function bubblePath(ctx, shape, x, y, w, h) {
+  ctx.beginPath();
+  if (shape === "circle") {
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  } else if (shape === "hexagon") {
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const r = Math.min(w, h) / 2;
+    for (let i = 0; i < 6; i += 1) {
+      const a = (Math.PI / 3) * i - Math.PI / 2;
+      ctx[i ? "lineTo" : "moveTo"](cx + r * Math.cos(a), cy + r * Math.sin(a));
+    }
+    ctx.closePath();
+  } else if (shape === "heart") {
+    const cx = x + w / 2;
+    ctx.moveTo(cx, y + h * 0.95);
+    ctx.bezierCurveTo(x - w * 0.12, y + h * 0.55, x + w * 0.02, y - h * 0.08, cx, y + h * 0.24);
+    ctx.bezierCurveTo(x + w * 0.98, y - h * 0.08, x + w * 1.12, y + h * 0.55, cx, y + h * 0.95);
+    ctx.closePath();
+  } else {
+    const radius = shape === "rounded" ? w * 0.24 : shape === "square" ? w * 0.04 : Math.min(w, h) * 0.1;
+    ctx.roundRect(x, y, w, h, radius);
+  }
+}
+
+/** Where a box of this size sits for a position like "bottom-right" or "middle-left". */
+export function placeBox(position, W, H, boxW, boxH, margin) {
+  const [v = "bottom", h = "right"] = position.split("-");
+  const x = h === "left" ? margin : h === "center" ? (W - boxW) / 2 : W - boxW - margin;
+  const y = v === "top" ? margin : v === "middle" ? (H - boxH) / 2 : H - boxH - margin;
+  return { x, y };
+}
+
+/**
+ * Draws the webcam bubble onto a W×H canvas.
+ * cam: { position, scale, shape, mirror, zoom, filter, border: "none"|"solid"|"gradient", borderColor, borderWidth: "thin"|"thick", shadow, label }
+ */
+export function drawCameraBubble(ctx, cam, image, cw, ch, W, H) {
+  if (!cw || !ch) return;
+  const shape = CAM_ASPECTS[cam.shape] ? cam.shape : "circle";
+  const aspect = shape === "wide" || shape === "tall" ? CAM_ASPECTS[shape] : 1;
+  let boxW = W * (cam.scale ?? CAM_SCALES.m);
+  let boxH = boxW / aspect;
+  if (boxH > H * 0.9) {
+    boxH = H * 0.9;
+    boxW = boxH * aspect;
+  }
+  const margin = Math.round(Math.min(W, H) * 0.03);
+  const label = cam.label?.trim();
+  const fontPx = label ? Math.round(Math.max(11, Math.min(boxW * 0.11, H * 0.035))) : 0;
+  const pillH = fontPx * 1.7;
+  const { x, y } = placeBox(cam.position || "bottom-right", W, H, boxW, boxH + (label ? pillH / 2 : 0), margin);
+
+  // Crop the camera to the box aspect from its centre, zoomed in if asked.
+  const zoom = Math.max(1, cam.zoom ?? 1);
+  let sw = cw;
+  let sh = ch;
+  if (cw / ch > aspect) sw = ch * aspect;
+  else sh = cw / aspect;
+  sw /= zoom;
+  sh /= zoom;
+  const sx = (cw - sw) / 2;
+  const sy = Math.max(0, (ch - sh) / 2 - (zoom > 1 ? sh * 0.06 : 0));
+
+  const bw = cam.border && cam.border !== "none" ? Math.max(2, boxW * (cam.borderWidth === "thick" ? 0.055 : 0.025)) : 0;
+
+  ctx.save();
+  bubblePath(ctx, shape, x, y, boxW, boxH);
+  if (cam.shadow !== false) {
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = margin * 0.7;
+    ctx.shadowOffsetY = margin * 0.15;
+  }
+  ctx.fillStyle = "#000";
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.clip();
+  const filter = CAM_FILTERS[cam.filter] ?? "none";
+  if (filter !== "none") ctx.filter = filter;
+  if (cam.mirror) {
+    ctx.translate(x + boxW, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, sx, sy, sw, sh, 0, 0, boxW, boxH);
+  } else {
+    ctx.drawImage(image, sx, sy, sw, sh, x, y, boxW, boxH);
+  }
+  ctx.restore();
+
+  if (bw) {
+    ctx.save();
+    bubblePath(ctx, shape, x + bw / 2, y + bw / 2, boxW - bw, boxH - bw);
+    ctx.lineWidth = bw;
+    ctx.lineJoin = "round";
+    if (cam.border === "gradient") {
+      const gradient = ctx.createLinearGradient(x, y + boxH, x + boxW, y);
+      RING_GRADIENT.forEach((color, i) => gradient.addColorStop(i / (RING_GRADIENT.length - 1), color));
+      ctx.strokeStyle = gradient;
+    } else {
+      ctx.strokeStyle = cam.borderColor || "#ffffff";
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (label) {
+    ctx.save();
+    ctx.font = `600 ${fontPx}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`;
+    const textW = Math.min(ctx.measureText(label).width, W - margin * 2 - fontPx * 1.6);
+    const pillW = textW + fontPx * 1.6;
+    const px = Math.max(margin / 2, Math.min(W - pillW - margin / 2, x + boxW / 2 - pillW / 2));
+    const py = Math.min(H - pillH - 2, y + boxH - pillH / 2);
+    ctx.shadowColor = "rgba(0,0,0,0.3)";
+    ctx.shadowBlur = fontPx * 0.5;
+    ctx.beginPath();
+    ctx.roundRect(px, py, pillW, pillH, pillH / 2);
+    ctx.fillStyle = cam.border === "solid" && cam.borderColor ? cam.borderColor : "rgba(24,20,16,0.85)";
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = cam.border === "solid" && isLight(cam.borderColor) ? "#18140f" : "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, px + pillW / 2, py + pillH / 2 + fontPx * 0.04, textW);
+    ctx.restore();
+  }
+}
+
+function isLight(hex = "") {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return false;
+  const n = parseInt(match[1], 16);
+  return ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114 > 160;
+}
+
 const MARK_SIZES = { s: 0.028, m: 0.04, l: 0.056 };
 const even = (value) => Math.max(2, Math.round(value / 2) * 2);
 
@@ -284,39 +432,7 @@ export class Compositor {
   }
 
   drawCamera(W, H) {
-    const { ctx, cam } = this;
-    const cw = this.camera.width;
-    const ch = this.camera.height;
-    const circle = cam.shape === "circle";
-    const boxW = W * (CAM_SIZES[cam.size] ?? CAM_SIZES.m);
-    const boxH = circle ? boxW : boxW * (ch / cw);
-    const margin = Math.round(Math.min(W, H) * 0.03);
-    const x = cam.position.endsWith("left") ? margin : W - boxW - margin;
-    const y = cam.position.startsWith("top") ? margin : H - boxH - margin;
-    // Crop the camera to the box aspect from its centre.
-    const boxAspect = boxW / boxH;
-    let sw = cw;
-    let sh = ch;
-    if (cw / ch > boxAspect) sw = ch * boxAspect;
-    else sh = cw / boxAspect;
-    ctx.save();
-    ctx.beginPath();
-    if (circle) ctx.arc(x + boxW / 2, y + boxH / 2, boxW / 2, 0, Math.PI * 2);
-    else ctx.roundRect(x, y, boxW, boxH, boxW * 0.06);
-    ctx.shadowColor = "rgba(0,0,0,0.35)";
-    ctx.shadowBlur = margin * 0.6;
-    ctx.fillStyle = "#000";
-    ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.clip();
-    if (cam.mirror) {
-      ctx.translate(x + boxW, y);
-      ctx.scale(-1, 1);
-      ctx.drawImage(this.camera.image, (cw - sw) / 2, (ch - sh) / 2, sw, sh, 0, 0, boxW, boxH);
-    } else {
-      ctx.drawImage(this.camera.image, (cw - sw) / 2, (ch - sh) / 2, sw, sh, x, y, boxW, boxH);
-    }
-    ctx.restore();
+    drawCameraBubble(this.ctx, this.cam, this.camera.image, this.camera.width, this.camera.height, W, H);
   }
 
   drawMark(W, H) {
@@ -338,8 +454,7 @@ export class Compositor {
       ctx.restore();
       return;
     }
-    const x = mark.position.endsWith("left") ? margin : W - boxW - margin;
-    const y = mark.position.startsWith("top") ? margin : H - boxH - margin;
+    const { x, y } = placeBox(mark.position, W, H, boxW, boxH, margin);
     if (mark.kind === "image") {
       ctx.drawImage(mark.bitmap, x, y, boxW, boxH);
     } else {

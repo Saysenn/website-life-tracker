@@ -1,13 +1,15 @@
 "use client";
 
-import { FolderOpen, ImagePlus, RotateCcw, Trash2 } from "lucide-react";
+import { FolderOpen, Heart, ImagePlus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { formatBytes } from "@/lib/tools/files";
 import { storageUsage } from "@/lib/tools/media-store";
+import { CAM_SCALES, RING_GRADIENT } from "@/lib/tools/screen/capture";
 import { cn } from "@/lib/utils";
 import { Choice, NumberField, Select } from "../video/controls";
+import { BubblePreview } from "./bubble-preview";
 
 /** Segmented controls are sized for a mouse; on a touch screen give each option a finger-sized height. */
 export const TOUCH_SEGMENTS = "[&>button]:pointer-coarse:h-10";
@@ -242,50 +244,219 @@ export function AudioPanel({ cfg, set, devices, onAllow, level, live, locked }) 
   );
 }
 
-export function WebcamPanel({ cfg, set, devices, onAllow, locked }) {
-  const off = !cfg.cam;
+const POSITIONS = [
+  ["top-left", "Top left"],
+  ["top-center", "Top centre"],
+  ["top-right", "Top right"],
+  ["middle-left", "Middle left"],
+  null,
+  ["middle-right", "Middle right"],
+  ["bottom-left", "Bottom left"],
+  ["bottom-center", "Bottom centre"],
+  ["bottom-right", "Bottom right"],
+];
+
+/** Eight places around the edge of the picture. */
+export function PositionPicker({ value, onChange, disabled }) {
   return (
-    <Group>
-      <Row label="Webcam overlay" hint="Puts your camera in a corner of screen, window, tab and area recordings. Position, size and shape can change while recording.">
-        <Switch checked={cfg.cam} onCheckedChange={(cam) => set({ cam })} disabled={locked} />
-      </Row>
-      <Row label="Camera" stack disabled={off && cfg.mode !== "webcam"}>
-        <div className="flex items-end gap-2">
-          <Select
-            label="Device"
-            value={cfg.camId}
-            onChange={(camId) => set({ camId })}
-            disabled={locked}
-            options={[["", "System default"], ...devices.cameras.map((cam) => [cam.id, cam.label])]}
+    <div role="radiogroup" aria-label="Position" className="grid size-20 shrink-0 grid-cols-3 gap-1 rounded-lg bg-hover p-1">
+      {POSITIONS.map((entry, i) =>
+        entry ? (
+          <button
+            key={entry[0]}
+            type="button"
+            role="radio"
+            aria-checked={value === entry[0]}
+            title={entry[1]}
+            disabled={disabled}
+            onClick={() => onChange(entry[0])}
+            className={cn("rounded-[0.4rem] transition-colors", value === entry[0] ? "bg-ink" : "bg-surface hover:bg-selected")}
           />
-          {devices.cameras.every((cam) => cam.label.startsWith("Camera ")) && (
-            <button type="button" onClick={onAllow} className="h-10 shrink-0 rounded-xl bg-hover px-3 text-xs font-semibold hover:bg-selected">
-              Show names
-            </button>
-          )}
+        ) : (
+          <span key={i} />
+        ),
+      )}
+    </div>
+  );
+}
+
+const SIZE_PRESETS = [
+  { value: "xs", label: "Tiny" },
+  { value: "s", label: "Small" },
+  { value: "m", label: "Medium" },
+  { value: "l", label: "Large" },
+  { value: "xl", label: "Huge" },
+];
+
+const SHAPES = [
+  { value: "circle", label: "Circle", swatch: "aspect-square rounded-full" },
+  { value: "rounded", label: "Rounded", swatch: "aspect-square rounded-[30%]" },
+  { value: "square", label: "Square", swatch: "aspect-square rounded-[0.2rem]" },
+  { value: "wide", label: "Wide", swatch: "aspect-video rounded-[0.3rem]" },
+  { value: "tall", label: "Tall", swatch: "aspect-[3/4] h-full rounded-[0.3rem]" },
+  { value: "hexagon", label: "Hexagon", swatch: "aspect-square [clip-path:polygon(50%_0,93%_25%,93%_75%,50%_100%,7%_75%,7%_25%)]" },
+  { value: "heart", label: "Heart" },
+];
+
+const FILTERS = [
+  { value: "none", label: "Natural" },
+  { value: "bw", label: "B&W" },
+  { value: "warm", label: "Warm" },
+  { value: "cool", label: "Cool" },
+  { value: "vivid", label: "Vivid" },
+  { value: "soft", label: "Soft" },
+];
+
+const RING_COLORS = ["#ffffff", "#1e1b16", "#a63f2a", "#e0892b", "#f2c94c", "#4f8a3c", "#2f6fd6", "#7a4fd6", "#e0559b"];
+
+/** Which preset a fine-tuned size is closest to, so the preset buttons still light up. */
+const nearestPreset = (scale) =>
+  Object.entries(CAM_SCALES).reduce((best, [key, value]) => (Math.abs(value - scale) < Math.abs(CAM_SCALES[best] - scale) ? key : best), "m");
+
+export function WebcamPanel({ cfg, set, devices, onAllow, locked, live, liveCamera }) {
+  const off = !cfg.cam && cfg.mode !== "webcam";
+  const designOff = !cfg.cam;
+  const scale = cfg.camScale;
+  const preset = Object.entries(CAM_SCALES).find(([, value]) => Math.abs(value - scale) < 0.001)?.[0];
+  return (
+    <div className="flex flex-col gap-3">
+      <Group>
+        <Row
+          label="Webcam overlay"
+          hint={
+            live && liveCamera
+              ? "Turn it off and on to hide or show your face mid-recording. Every design change below shows up in the recording right away."
+              : "Puts your camera on top of screen, window, tab and area recordings."
+          }
+        >
+          <Switch checked={cfg.cam} onCheckedChange={(cam) => set({ cam })} disabled={locked && !liveCamera} />
+        </Row>
+        <Row label="Camera" stack disabled={off}>
+          <div className="flex items-end gap-2">
+            <Select
+              label="Device"
+              value={cfg.camId}
+              onChange={(camId) => set({ camId })}
+              disabled={locked}
+              options={[["", "System default"], ...devices.cameras.map((cam) => [cam.id, cam.label])]}
+            />
+            {devices.cameras.every((cam) => cam.label.startsWith("Camera ")) && (
+              <button type="button" onClick={onAllow} className="h-10 shrink-0 rounded-xl bg-hover px-3 text-xs font-semibold hover:bg-selected">
+                Show names
+              </button>
+            )}
+          </div>
+        </Row>
+      </Group>
+
+      <BubblePreview cfg={cfg} enabled={!designOff} />
+
+      <Group title="Size & place">
+        <Row label="Size" stack disabled={designOff}>
+          <div className="flex flex-col gap-2">
+            <Choice value={preset ?? nearestPreset(scale)} onChange={(key) => set({ camScale: CAM_SCALES[key] })} options={SIZE_PRESETS} disabled={designOff} />
+            <Slider label="Exact size" value={scale} min={0.05} max={0.45} step={0.005} onChange={(camScale) => set({ camScale })} disabled={designOff} format={(v) => `${Math.round(v * 100)}%`} />
+          </div>
+        </Row>
+        <Row label="Position" hint="Where the bubble sits on the picture." disabled={designOff}>
+          <PositionPicker value={cfg.camPosition} onChange={(camPosition) => set({ camPosition })} disabled={designOff} />
+        </Row>
+        <Row label="Zoom" hint="Fill a small bubble with your face instead of the room." disabled={designOff}>
+          <Slider label="Zoom" value={cfg.camZoom} min={1} max={2.5} step={0.05} onChange={(camZoom) => set({ camZoom })} disabled={designOff} format={(v) => `${v.toFixed(1)}×`} />
+        </Row>
+      </Group>
+
+      <Group title="Shape">
+        <div role="radiogroup" aria-label="Shape" className="grid grid-cols-4 gap-1.5 py-3 sm:grid-cols-7">
+          {SHAPES.map((shape) => {
+            const active = (cfg.camShape === "rect" ? "wide" : cfg.camShape) === shape.value;
+            return (
+              <button
+                key={shape.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={designOff}
+                onClick={() => set({ camShape: shape.value })}
+                className={cn(
+                  "flex flex-col items-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-hover hover:text-ink disabled:opacity-50",
+                  active ? "bg-surface text-ink shadow-card" : "bg-sunken",
+                )}
+              >
+                <span className="flex h-7 w-10 items-center justify-center">
+                  {shape.swatch ? <span className={cn("block max-h-full max-w-full bg-current", shape.swatch, shape.value === "wide" ? "w-full" : "h-full")} /> : <Heart className="size-[2.6rem] fill-current" strokeWidth={0} />}
+                </span>
+                {shape.label}
+              </button>
+            );
+          })}
         </div>
-      </Row>
-      <Row label="Position" disabled={off}>
-        <CornerPicker value={cfg.camPosition} onChange={(camPosition) => set({ camPosition })} />
-      </Row>
-      <Row label="Size & shape" stack disabled={off}>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Choice value={cfg.camSize} onChange={(camSize) => set({ camSize })} options={SIZES} disabled={off} />
-          <Choice
-            value={cfg.camShape}
-            onChange={(camShape) => set({ camShape })}
-            disabled={off}
-            options={[
-              { value: "circle", label: "Circle" },
-              { value: "rect", label: "Rectangle" },
-            ]}
-          />
-        </div>
-      </Row>
-      <Row label="Mirror" hint="Flip the camera like a mirror." disabled={off}>
-        <Switch checked={cfg.camMirror} onCheckedChange={(camMirror) => set({ camMirror })} disabled={off} />
-      </Row>
-    </Group>
+      </Group>
+
+      <Group title="Design">
+        <Row label="Ring" hint="An outline around the bubble." stack disabled={designOff}>
+          <div className="flex flex-col gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Choice
+                value={cfg.camBorder}
+                onChange={(camBorder) => set({ camBorder })}
+                disabled={designOff}
+                options={[
+                  { value: "none", label: "None" },
+                  { value: "solid", label: "Colour" },
+                  { value: "gradient", label: "Gradient" },
+                ]}
+              />
+              <Choice
+                value={cfg.camBorderWidth}
+                onChange={(camBorderWidth) => set({ camBorderWidth })}
+                disabled={designOff || cfg.camBorder === "none"}
+                options={[
+                  { value: "thin", label: "Thin" },
+                  { value: "thick", label: "Thick" },
+                ]}
+              />
+            </div>
+            {cfg.camBorder === "solid" && (
+              <div role="radiogroup" aria-label="Ring colour" className="flex flex-wrap items-center gap-1.5">
+                {RING_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    role="radio"
+                    aria-checked={cfg.camBorderColor === color}
+                    title={color}
+                    onClick={() => set({ camBorderColor: color })}
+                    className={cn(
+                      "size-8 rounded-full shadow-card transition-transform hover:scale-105",
+                      cfg.camBorderColor === color && "ring-2 ring-ink ring-offset-2 ring-offset-surface",
+                    )}
+                    style={{ background: color }}
+                  />
+                ))}
+                <label title="Any colour" className="relative flex size-8 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[conic-gradient(red,yellow,lime,cyan,blue,magenta,red)] shadow-card">
+                  <span className="sr-only">Any colour</span>
+                  <input type="color" value={cfg.camBorderColor} onChange={(event) => set({ camBorderColor: event.target.value })} className="absolute inset-0 cursor-pointer opacity-0" />
+                </label>
+              </div>
+            )}
+            {cfg.camBorder === "gradient" && <span className="h-2 w-full rounded-full sm:w-64" style={{ background: `linear-gradient(90deg, ${RING_GRADIENT.join(", ")})` }} />}
+          </div>
+        </Row>
+        <Row label="Look" stack disabled={designOff}>
+          <Choice value={cfg.camFilter} onChange={(camFilter) => set({ camFilter })} options={FILTERS} disabled={designOff} />
+        </Row>
+        <Row label="Name tag" hint="A small label under the bubble, e.g. your name or role." stack disabled={designOff}>
+          <Input value={cfg.camLabel} maxLength={40} placeholder="Leave empty for none" disabled={designOff} onChange={(event) => set({ camLabel: event.target.value })} />
+        </Row>
+        <Row label="Shadow" hint="A soft shadow so the bubble lifts off the screen." disabled={designOff}>
+          <Switch checked={cfg.camShadow} onCheckedChange={(camShadow) => set({ camShadow })} disabled={designOff} />
+        </Row>
+        <Row label="Mirror" hint="Flip the camera like a mirror." disabled={designOff}>
+          <Switch checked={cfg.camMirror} onCheckedChange={(camMirror) => set({ camMirror })} disabled={designOff} />
+        </Row>
+      </Group>
+    </div>
   );
 }
 
@@ -452,7 +623,7 @@ export const HOTKEYS = [
 export function HotkeysPanel({ cfg, set, isMac }) {
   return (
     <Group>
-      <Row label="Keyboard shortcuts" hint="Work while this page or the pop-out recording bar is focused.">
+      <Row label="Keyboard shortcuts" hint="Work while this page or the floating bar is focused. For shortcuts in every tab, add the extension under Launch.">
         <Switch checked={cfg.hotkeys} onCheckedChange={(hotkeys) => set({ hotkeys })} />
       </Row>
       {HOTKEYS.map(([mod, key, label]) => (
@@ -466,7 +637,7 @@ export function HotkeysPanel({ cfg, set, isMac }) {
           </span>
         </Row>
       ))}
-      <Row label="Pop-out recording bar" hint="Opens a small always-on-top window with the timer, pause, screenshot and stop while you record (Chrome and Edge).">
+      <Row label="Floating control bar" hint="When you press REC, a small always-on-top window opens with the timer, mic, webcam, pause, screenshot and stop. It stays on screen while you switch tabs or apps (Chrome and Edge).">
         <Switch checked={cfg.miniBar} onCheckedChange={(miniBar) => set({ miniBar })} />
       </Row>
     </Group>
