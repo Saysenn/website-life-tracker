@@ -144,6 +144,13 @@ export function PdfEditor() {
 
   const loadSource = async (picked) => {
     const bytes = await readFile(picked);
+    // pdf.js opens PDFs that are locked against changes without asking, but pdf-lib can't write them back out,
+    // so Download would fail after all the editing. Refuse them up front instead.
+    const { PDFDocument } = await import("pdf-lib");
+    const check = await PDFDocument.load(bytes, { updateMetadata: false, ignoreEncryption: true });
+    if (check.isEncrypted) {
+      throw new Error("This PDF is protected against changes, so it can't be edited. Print it to a new PDF (Save as PDF) and open that instead.");
+    }
     const pdf = await openPdf(bytes);
     const sizes = await readPageSizes(pdf);
     return { source: { bytes, pdf, name: picked.name }, sizes };
@@ -414,7 +421,12 @@ export function PdfEditor() {
       const pdfs = list.filter((item) => item.type === "application/pdf");
       if (pdfs.length) appendPdfs(pdfs);
       for (const [index, item] of list.filter((entry) => entry.type.startsWith("image/")).entries()) {
-        await placeImage(await fileToAsset(item), { pageId, point: [point[0] + index * 16, point[1] + index * 16] });
+        // One image the browser can't read (e.g. HEIC in Chrome) is reported and skipped, not the rest with it.
+        try {
+          await placeImage(await fileToAsset(item), { pageId, point: [point[0] + index * 16, point[1] + index * 16] });
+        } catch {
+          toast.error(`Couldn't read ${item.name} — try a JPG or PNG`);
+        }
       }
     },
   };

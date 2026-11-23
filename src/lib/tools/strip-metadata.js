@@ -248,8 +248,10 @@ function cleanGif(bytes) {
 
 /* ---------- MP4 / MOV / M4A ---------- */
 
-function cleanMp4(input) {
-  const bytes = input.slice();
+// Blanks metadata in place. `owned` says the caller's bytes are a private copy (the browser queue), which saves
+// holding a second copy of a big video; otherwise (transfers fall back to the original on failure) it copies first.
+function cleanMp4(input, { owned = false } = {}) {
+  const bytes = owned ? input : input.slice();
   const view = new DataView(bytes.buffer);
   const removed = new Set();
 
@@ -345,6 +347,8 @@ async function cleanPdf(bytes) {
     throw new Error("This PDF couldn't be opened");
   }
   const removed = new Set();
+  // Read before the getters below: pdf-lib's getAuthor() & co. create an empty Info dictionary when there is none.
+  const hadInfo = Boolean(doc.context.trailerInfo.Info);
   if (doc.getAuthor()) removed.add("Author");
   if (doc.getTitle() || doc.getSubject() || doc.getKeywords()) removed.add("Title & keywords");
   if (doc.getCreator() || doc.getProducer()) removed.add("Software");
@@ -354,7 +358,7 @@ async function cleanPdf(bytes) {
   if (info) {
     if (info instanceof PDFRef) doc.context.delete(info);
     doc.context.trailerInfo.Info = undefined;
-    if (!removed.size) removed.add("Document info");
+    if (hadInfo && !removed.size) removed.add("Document info");
   }
   const xmp = doc.catalog.get(PDFName.of("Metadata"));
   if (xmp) {
@@ -487,6 +491,8 @@ export function detectKind(bytes, name) {
   return "unknown";
 }
 
+const CLEAN_LIMIT = 1024 * 1024 * 1024;
+
 const CLEANERS = {
   jpeg: cleanJpeg,
   png: cleanPng,
@@ -518,6 +524,8 @@ export async function cleanBytes(bytes, name) {
 /** Queue processor: reads, cleans and returns a ready-to-download blob. */
 export async function stripMetadata(file, onProgress, { suffix = true } = {}) {
   if (file.size === 0) throw new Error("This file is empty");
+  // The whole file is held in memory while it's cleaned; past this a browser tab can run out and crash.
+  if (file.size > CLEAN_LIMIT) throw new Error("Files over 1 GB are too big to clean in the browser");
   const bytes = await readFile(file, (share) => onProgress(share * 0.6));
   onProgress(0.65);
   const kind = detectKind(bytes, file.name);
@@ -530,7 +538,7 @@ export async function stripMetadata(file, onProgress, { suffix = true } = {}) {
   }
   if (kind === "unknown") throw new Error(`.${extensionOf(file.name) || "?"} files aren't supported yet`);
 
-  const result = await CLEANERS[kind](bytes);
+  const result = await CLEANERS[kind](bytes, { owned: true });
   onProgress(0.95);
   return {
     blob: new Blob([result.bytes], { type: file.type || "application/octet-stream" }),

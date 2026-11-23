@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Download, FileArchive, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { baseName, downloadBlob, downloadZip } from "@/lib/tools/files";
 import { FRAME_FORMATS, MAX_FRAMES, extractFrames, fmtTime } from "@/lib/tools/video/frames";
@@ -35,6 +35,19 @@ export function FramesPanel({ file, src, duration, onSeek }) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const stop = useRef(false);
+  const latest = useRef(frames);
+  useEffect(() => {
+    latest.current = frames;
+  });
+
+  // A new video (or leaving the page) remounts this panel: stop the running job and free the frame images.
+  useEffect(
+    () => () => {
+      stop.current = "unmounted";
+      latest.current.forEach((frame) => URL.revokeObjectURL(frame.url));
+    },
+    [],
+  );
 
   const estimate =
     mode === "count"
@@ -64,12 +77,16 @@ export function FramesPanel({ file, src, duration, onSeek }) {
         format: usedFormat,
         quality: 0.92,
         maxWidth: Number(size) || Infinity,
-        onFrame: (frame) => setFrames((current) => [...current, { ...frame, format: usedFormat }]),
+        onFrame: (frame) => {
+          // A frame finished after unmount would never be shown or revoked.
+          if (stop.current === "unmounted") return URL.revokeObjectURL(frame.url);
+          setFrames((current) => [...current, { ...frame, format: usedFormat }]);
+        },
         onProgress: setProgress,
         cancelled: () => stop.current,
       });
     } catch (error) {
-      toast.error(error.message);
+      if (stop.current !== "unmounted") toast.error(error.message);
     } finally {
       setRunning(false);
     }

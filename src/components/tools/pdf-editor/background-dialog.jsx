@@ -7,6 +7,12 @@ import { BackgroundRemover } from "./background-remover";
 /** Remove the background of an image already placed on the page. */
 export function BackgroundDialog({ image, onOpenChange, onApply }) {
   const [result, setResult] = useState(null);
+  // Opening it on another image drops the last image's result at once, so a quick Apply can't put it on this one.
+  const [forImage, setForImage] = useState(image);
+  if (image !== forImage) {
+    setForImage(image);
+    setResult(null);
+  }
   const onResult = useCallback((src, width, height) => setResult(src ? { src, width, height } : null), []);
 
   return (

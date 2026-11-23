@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Mic, MicOff, Pause, Play, Square, Video, VideoOff, X } from "lucide-react";
+import { Mic, MicOff, Pause, Play, Square, Video, VideoOff, X } from "lucide-react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { formatBytes } from "@/lib/tools/files";
@@ -10,8 +10,9 @@ import { cn } from "@/lib/utils";
 export const canPopOut = () => typeof window !== "undefined" && "documentPictureInPicture" in window;
 
 /** Opens an always-on-top little window (Chrome / Edge) that the recording bar is rendered into. */
-export async function openPopOut() {
-  const pip = await window.documentPictureInPicture.requestWindow({ width: 470, height: 76 });
+export async function openPopOut({ tutorial = false } = {}) {
+  // Tutorial mode adds the tools and a live pad to click and draw on, so it needs room.
+  const pip = await window.documentPictureInPicture.requestWindow(tutorial ? { width: 560, height: 430 } : { width: 470, height: 76 });
   for (const sheet of document.styleSheets) {
     try {
       const style = pip.document.createElement("style");
@@ -29,15 +30,15 @@ export async function openPopOut() {
   pip.document.documentElement.className = document.documentElement.className;
   pip.document.documentElement.style.cssText = document.documentElement.style.cssText;
   pip.document.body.className = `${document.body.className} bg-ground`;
-  pip.document.body.style.cssText = "margin:0;height:100vh;display:flex;align-items:center";
+  pip.document.body.style.cssText = "margin:0;height:100vh;overflow:hidden";
   pip.document.title = "Recording";
   return pip;
 }
 
 const WAITING = { acquiring: "Choose what to share…", selecting: "Pick the area in the recorder tab", saving: "Saving…" };
 
-/** The compact recording bar: status light, timer, size, mic and webcam switches, pause, screenshot and stop. */
-export function RecordingBar({ phase, clock, countdown, onPause, onStop, onShot, mic, onMic, cam, onCam, compact = false }) {
+/** The compact recording bar: status light, timer, size, mic and webcam switches, pause and stop. */
+export function RecordingBar({ phase, clock, countdown, onPause, onStop, mic, onMic, cam, onCam, compact = false }) {
   const paused = phase === "paused";
   const waiting = WAITING[phase];
   const running = phase === "recording" || paused || phase === "countdown";
@@ -62,9 +63,6 @@ export function RecordingBar({ phase, clock, countdown, onPause, onStop, onShot,
       )}
       <BarButton label={paused ? "Resume" : "Pause"} onClick={onPause} disabled={phase !== "recording" && !paused}>
         {paused ? <Play className="fill-current" /> : <Pause className="fill-current" />}
-      </BarButton>
-      <BarButton label="Screenshot" onClick={onShot} disabled={!running && phase !== "selecting"}>
-        <Camera />
       </BarButton>
       <button
         type="button"
@@ -99,13 +97,21 @@ function BarButton({ label, onClick, disabled, active = false, children }) {
   );
 }
 
-/** Renders the recording bar into the pop-out window while it's open, and wires the hotkeys there too. */
-export function PopOut({ pip, onKeyDown, ...props }) {
+/** Renders the recording bar (and the tutorial tools, when given) into the pop-out window, with the hotkeys there too. */
+export function PopOut({ pip, onKeyDown, children, ...props }) {
   useEffect(() => {
     if (!pip) return;
     pip.addEventListener("keydown", onKeyDown);
     return () => pip.removeEventListener("keydown", onKeyDown);
   }, [pip, onKeyDown]);
   if (!pip) return null;
-  return createPortal(<RecordingBar compact {...props} />, pip.document.body);
+  return createPortal(
+    <div className="flex h-screen w-full flex-col">
+      <div className="h-[7.6rem] shrink-0">
+        <RecordingBar compact {...props} />
+      </div>
+      {children}
+    </div>,
+    pip.document.body,
+  );
 }

@@ -21,6 +21,13 @@ export const TOOLS = [
     tags: ["Area", "Webcam", "MP4"],
   },
   {
+    slug: "screenshotr",
+    title: "Screenshotr",
+    summary: "Capture an area, window or whole page, then annotate with arrows, text, steps, blur and spotlight. Copy, save, pin it on top or pull out the text.",
+    icon: "shot",
+    tags: ["Annotate", "Pin", "OCR"],
+  },
+  {
     slug: "voice-recorder",
     title: "Voice recorder",
     summary: "Record your voice or drop in audio, then strip background noise, hum and hiss with AI and download a clean WAV or MP3.",

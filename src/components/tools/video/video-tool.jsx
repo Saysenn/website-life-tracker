@@ -38,12 +38,14 @@ export function VideoTool() {
   const choose = (files) => {
     const picked = [...files].find((item) => item.type.startsWith("video/") || /\.(mp4|m4v|mov|webm|mkv|avi|ogv)$/i.test(item.name));
     if (!picked) return toast.error("Choose a video file");
-    if (src) URL.revokeObjectURL(src);
     setInfo(null);
     setYoutube(null);
     setFile(picked);
     setSrc(URL.createObjectURL(picked));
   };
+
+  // The old video's URL is freed once its panels have unmounted (and stopped), and when leaving the page.
+  useEffect(() => () => src && URL.revokeObjectURL(src), [src]);
 
   // Ctrl/Cmd+V anywhere on the page (outside a text box) takes a copied video file or link.
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, Heart, ImagePlus, RotateCcw, Trash2 } from "lucide-react";
+import { Heart, ImagePlus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
@@ -8,6 +8,7 @@ import { formatBytes } from "@/lib/tools/files";
 import { storageUsage } from "@/lib/tools/media-store";
 import { CAM_SCALES, RING_GRADIENT } from "@/lib/tools/screen/capture";
 import { cn } from "@/lib/utils";
+import { SaveLocation } from "../save-location";
 import { Choice, NumberField, Select } from "../video/controls";
 import { BubblePreview } from "./bubble-preview";
 
@@ -524,44 +525,7 @@ export function LogoPanel({ cfg, set, logoUrl, onLogo }) {
   );
 }
 
-export function ImagePanel({ cfg, set }) {
-  return (
-    <Group>
-      <Row label="Image format">
-        <div className="w-full sm:w-64">
-          <Choice
-            value={cfg.imageFormat}
-            onChange={(imageFormat) => set({ imageFormat })}
-            options={[
-              { value: "png", label: "PNG", note: "Sharp" },
-              { value: "jpg", label: "JPG", note: "Small" },
-            ]}
-          />
-        </div>
-      </Row>
-      {cfg.imageFormat === "jpg" && (
-        <Row label="JPG quality">
-          <Slider label="JPG quality" value={cfg.imageQuality} min={0.5} max={1} onChange={(imageQuality) => set({ imageQuality })} />
-        </Row>
-      )}
-      <Row label="Copy to clipboard" hint="Also copies each PNG screenshot, ready to paste.">
-        <Switch checked={cfg.clipboard} onCheckedChange={(clipboard) => set({ clipboard })} />
-      </Row>
-      <Row label="Repeat capture" hint="While recording, also save a screenshot every few seconds.">
-        <Switch checked={cfg.repeat} onCheckedChange={(repeat) => set({ repeat })} />
-      </Row>
-      {cfg.repeat && (
-        <Row label="Every">
-          <div className="w-full sm:w-64">
-            <NumberField label="Interval" value={cfg.repeatSeconds} onChange={(repeatSeconds) => set({ repeatSeconds })} min={1} max={3600} suffix="sec" />
-          </div>
-        </Row>
-      )}
-    </Group>
-  );
-}
-
-export function OutputPanel({ cfg, set, folder, onPickFolder, onReconnect, onForget, count }) {
+export function OutputPanel({ cfg, set, folder, count }) {
   const [usage, setUsage] = useState(null);
   useEffect(() => {
     storageUsage().then(setUsage);
@@ -570,43 +534,16 @@ export function OutputPanel({ cfg, set, folder, onPickFolder, onReconnect, onFor
   return (
     <div className="flex flex-col gap-3">
       <Group title="Where recordings go">
-        <Row
-          label="Save to a folder"
-          hint={
-            folder.supported
-              ? "Recordings stream straight into a folder on your computer, so even long ones don't fill up memory."
-              : "This browser can't write to folders — use Chrome or Edge for that. Recordings are kept below and can be downloaded."
-          }
-        >
-          {folder.supported && (
-            <div className="flex shrink-0 items-center gap-1.5">
-              {folder.handle && folder.permission !== "granted" && (
-                <button type="button" onClick={onReconnect} className="flex h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-3 text-sm font-semibold text-warning hover:bg-warning-soft/70">
-                  <RotateCcw className="size-[1.4rem]" />
-                  Allow again
-                </button>
-              )}
-              <button type="button" onClick={onPickFolder} className="flex h-9 items-center gap-1.5 rounded-lg bg-hover px-3 text-sm font-medium hover:bg-selected">
-                <FolderOpen className="size-[1.5rem]" />
-                {folder.handle ? folder.handle.name : "Choose folder"}
-              </button>
-              {folder.handle && (
-                <button type="button" onClick={onForget} title="Stop saving to this folder" className="flex size-9 items-center justify-center rounded-lg text-ink-3 hover:bg-danger-soft hover:text-danger">
-                  <Trash2 className="size-[1.5rem]" />
-                </button>
-              )}
-            </div>
-          )}
-        </Row>
-        <Row label="Also download when done" hint="Sends each finished recording to your Downloads folder (when no folder is chosen).">
-          <Switch checked={cfg.autoDownload} onCheckedChange={(autoDownload) => set({ autoDownload })} />
-        </Row>
+        <SaveLocation value={cfg.saveTo} onChange={(saveTo) => set({ saveTo })} folder={folder} what="recordings" />
+        {cfg.saveTo === "folder" && (
+          <p className="pb-3 text-xs text-ink-3">Recordings stream into the folder while you record, so even long ones don&apos;t fill up memory.</p>
+        )}
         <Row label="File name" hint={`Files are named like “${cfg.prefix || "Recording"} 2026-11-21 14-05-09.mp4”.`} stack>
           <Input value={cfg.prefix} maxLength={40} placeholder="Recording" onChange={(event) => set({ prefix: event.target.value.replace(/[\\/:*?"<>|]/g, "") })} />
         </Row>
       </Group>
       <Group title="Kept on this device">
-        <Row label="Browser storage used" hint="Recordings in the list below live in this browser until you delete them.">
+        <Row label="Browser storage used" hint="Every recording is also listed below, so you can play, download or delete it from here.">
           <span className="text-sm font-semibold tabular-nums">{usage ? `${formatBytes(usage.usage)} of ${formatBytes(usage.quota)}` : "—"}</span>
         </Row>
       </Group>
@@ -617,7 +554,7 @@ export function OutputPanel({ cfg, set, folder, onPickFolder, onReconnect, onFor
 export const HOTKEYS = [
   ["Alt", "R", "Start / stop recording"],
   ["Alt", "P", "Pause / resume"],
-  ["Alt", "S", "Screenshot"],
+  ["Alt", "M", "Mute / unmute microphone"],
 ];
 
 export function HotkeysPanel({ cfg, set, isMac }) {
@@ -637,7 +574,7 @@ export function HotkeysPanel({ cfg, set, isMac }) {
           </span>
         </Row>
       ))}
-      <Row label="Floating control bar" hint="When you press REC, a small always-on-top window opens with the timer, mic, webcam, pause, screenshot and stop. It stays on screen while you switch tabs or apps (Chrome and Edge).">
+      <Row label="Floating control bar" hint="When you press REC, a small always-on-top window opens with the timer, mic, webcam, pause and stop — plus the tutorial tools and a live pad to click and draw on when Tutorial mode is on. It stays on screen while you switch tabs or apps (Chrome and Edge).">
         <Switch checked={cfg.miniBar} onCheckedChange={(miniBar) => set({ miniBar })} />
       </Row>
     </Group>

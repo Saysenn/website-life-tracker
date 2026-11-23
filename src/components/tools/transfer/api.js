@@ -16,6 +16,9 @@ const PARALLEL_PARTS = 3;
 
 function putPart(url, blob, onProgress, signal) {
   return new Promise((resolve, reject) => {
+    // Cancelled while the upload was still being created: the abort event has already fired, so it would never
+    // reach this request.
+    if (signal?.aborted) return reject(Object.assign(new Error("Cancelled"), { aborted: true }));
     const xhr = new XMLHttpRequest();
     const abort = () => xhr.abort();
     xhr.open("PUT", url);

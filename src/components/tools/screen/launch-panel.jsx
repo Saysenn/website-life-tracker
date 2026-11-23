@@ -168,7 +168,7 @@ export function LaunchPanel({ extension, isMac }) {
       <Group title="Browser extension">
         <Row
           label="Control recording from every tab"
-          hint="A toolbar button with the live timer, start/stop, pause, screenshot and mic; a badge that shows the recording time; and shortcuts that work in any tab. For Chrome, Edge, Brave and Arc."
+          hint="A toolbar button with the live timer, start/stop, pause and mic; a badge with the recording time; shortcuts that work in any tab; and for tutorial mode, zoom that follows your clicks and typing plus drawing right on the page. For Chrome, Edge, Brave and Arc."
         >
           <span
             className={cn(
@@ -196,13 +196,13 @@ export function LaunchPanel({ extension, isMac }) {
               Open <span className="font-mono text-xs font-semibold">chrome://extensions</span> <CopyButton text="chrome://extensions" label="Copy" /> in a new tab (Edge: <span className="font-mono text-xs">edge://extensions</span>).
             </Step>
             <Step n={3}>Turn on <b>Developer mode</b>, click <b>Load unpacked</b> and choose the <span className="font-mono text-xs">life-tracker-recorder</span> folder.</Step>
-            <Step n={4}>Pin it from the puzzle-piece menu so the button and timer stay in your toolbar, then reload this page.</Step>
+            <Step n={4}>Pin it from the puzzle-piece menu so the button and timer stay in your toolbar, then reload this page and any tabs you want to show in a tutorial.</Step>
           </ol>
         </div>
         {[
           ["R", "Start / stop recording"],
           ["P", "Pause / resume"],
-          ["S", "Screenshot"],
+          ["D", "Draw on the page"],
           ["O", "Open the controls"],
         ].map(([key, label]) => (
           <Row key={key} label={label} disabled={!extension}>
@@ -217,7 +217,11 @@ export function LaunchPanel({ extension, isMac }) {
         ))}
         <p className="pb-3 text-xs text-ink-3">
           <Bookmark className="mr-1 inline size-[1.2rem] align-[-0.2rem]" />
-          These work in any tab while the browser is in front. Change them at <span className="font-mono">chrome://extensions/shortcuts</span>.
+          These work in any tab while the browser is in front. Change them at <span className="font-mono">chrome://extensions/shortcuts</span> — “Mute” and “Zoom out” can be given keys there too.
+        </p>
+        <p className="pb-3 text-xs text-ink-3">
+          Chrome warns that it can “read and change data on all websites”: that&apos;s what lets tutorial mode see where you click and type in any tab. It only reports while a tutorial recording runs, and only to this
+          recorder — nothing leaves your computer.
         </p>
       </Group>
     </div>

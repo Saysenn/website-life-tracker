@@ -678,6 +678,7 @@ export function FileTransfer({
   const selectedRef = useRef(selected);
   const timer = useRef(null);
   const tick = useRef(null);
+  const alive = useRef(0);
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -685,10 +686,13 @@ export function FileTransfer({
 
   const load = useCallback(async () => {
     clearTimeout(timer.current);
+    // Bumped on unmount: a request still in flight then must not toast or schedule another poll.
+    const generation = alive.current;
     try {
       const next = await call("/api/transfer/admin/chats?files=1", {
         method: "GET",
       });
+      if (generation !== alive.current) return;
       const previous = seen.current;
       if (previous) {
         next.chats.forEach((chat) => {
@@ -722,8 +726,10 @@ export function FileTransfer({
       ]);
       setData(next);
     } catch (error) {
+      if (generation !== alive.current) return;
       if (error.status === 401) return toast.error(error.message);
     }
+    clearTimeout(timer.current);
     timer.current = setTimeout(
       () => tick.current?.(),
       document.hidden ? LIST_SLOW : LIST_FAST,
@@ -739,6 +745,7 @@ export function FileTransfer({
     const wake = () => !document.hidden && load();
     document.addEventListener("visibilitychange", wake);
     return () => {
+      alive.current += 1;
       clearTimeout(timer.current);
       document.removeEventListener("visibilitychange", wake);
     };

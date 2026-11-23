@@ -1,7 +1,7 @@
 "use client";
 
 import { Download } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { baseName, downloadBlob } from "@/lib/tools/files";
@@ -76,8 +76,19 @@ export function TranscriptPanel({ file, onSeek }) {
   const stop = useRef(false);
   const audio = useRef({ file: null, samples: null });
 
+  // A new video (or leaving the page) remounts this panel: don't keep transcribing the old one.
+  const busy = useRef(false);
+  useEffect(
+    () => () => {
+      stop.current = true;
+      if (busy.current) stopTranscriber();
+    },
+    [],
+  );
+
   const start = async () => {
     stop.current = false;
+    busy.current = true;
     setRunning(true);
     setFinished(false);
     setSegments([]);
@@ -98,6 +109,7 @@ export function TranscriptPanel({ file, onSeek }) {
     } catch (error) {
       if (!stop.current) toast.error(error.message);
     } finally {
+      busy.current = false;
       setRunning(false);
     }
   };
@@ -176,6 +188,16 @@ export function ScreenTextPanel({ file, src, onSeek }) {
   const [status, setStatus] = useState({ progress: 0, detail: "" });
   const [finished, setFinished] = useState(false);
   const stop = useRef(false);
+  const unmounted = useRef(false);
+
+  // A new video (or leaving the page) remounts this panel: stop reading frames from the old one.
+  useEffect(
+    () => () => {
+      unmounted.current = true;
+      stop.current = true;
+    },
+    [],
+  );
 
   const start = async () => {
     stop.current = false;
@@ -193,7 +215,7 @@ export function ScreenTextPanel({ file, src, onSeek }) {
       });
       setFinished(true);
     } catch (error) {
-      toast.error(error.message);
+      if (!unmounted.current) toast.error(error.message);
     } finally {
       setRunning(false);
     }

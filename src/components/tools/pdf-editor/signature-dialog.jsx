@@ -2,11 +2,12 @@
 
 import { Eraser, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Dialog } from "@/components/ui/dialog";
 import { Segmented } from "@/components/ui/segmented";
 import { useStoredState } from "@/hooks/use-stored-state";
 import { SIGNATURE_FONTS, cssFamily, loadFont } from "@/lib/tools/pdf/fonts";
-import { blobToDataUrl, trimTransparent } from "@/lib/tools/pdf/images";
+import { fileToAsset, trimTransparent } from "@/lib/tools/pdf/images";
 import { cn } from "@/lib/utils";
 import { BackgroundRemover, CHECKERBOARD } from "./background-remover";
 
@@ -215,7 +216,14 @@ export function SignatureDialog({ open, onOpenChange, onUse }) {
           onChange={async (event) => {
             const file = event.target.files?.[0];
             event.target.value = "";
-            if (file) setUpload({ src: await blobToDataUrl(file) });
+            if (!file) return;
+            // Converted like any other image, so a WebP / GIF / HEIC photo is a PNG the PDF can embed (and has a size)
+            // even when "Remove background" is off.
+            try {
+              setUpload(await fileToAsset(file));
+            } catch {
+              toast.error("Couldn't read that image — try a JPG or PNG");
+            }
           }}
         />
 

@@ -120,6 +120,8 @@ self.onmessage = async ({ data }) => {
 `;
 
 let worker = null;
+// Rejects for calls still waiting on the worker, so stopping settles them instead of leaving them hanging forever.
+const pending = new Set();
 
 function getWorker() {
   if (!worker) {
@@ -132,9 +134,11 @@ function getWorker() {
 function call(message, onEvent) {
   const target = getWorker();
   return new Promise((resolve, reject) => {
+    pending.add(reject);
     const listen = ({ data }) => {
       if (data.type === "download") return onEvent?.(data);
       target.removeEventListener("message", listen);
+      pending.delete(reject);
       if (data.type === "error") reject(new Error(data.message));
       else resolve(data);
     };
@@ -147,6 +151,9 @@ function call(message, onEvent) {
 export function stopTranscriber() {
   worker?.terminate();
   worker = null;
+  const error = Object.assign(new Error("Stopped"), { aborted: true });
+  pending.forEach((reject) => reject(error));
+  pending.clear();
 }
 
 const HALLUCINATIONS = /^(\[.*\]|\(.*\)|♪+|thank you\.?|thanks for watching!?|you)$/i;
@@ -156,6 +163,8 @@ const HALLUCINATIONS = /^(\[.*\]|\(.*\)|♪+|thank you\.?|thanks for watching!?|
  * segments [{start, end, text}] in seconds.
  */
 export async function transcribe(samples, { model, language, translate, onProgress, onSegment, cancelled }) {
+  // Stopped while the sound was still being decoded: don't start loading the model.
+  if (cancelled()) return [];
   const files = {};
   onProgress({ phase: "model", progress: 0, detail: "Loading speech model…" });
   await call({ type: "load", model }, (event) => {

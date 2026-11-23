@@ -75,9 +75,11 @@ export async function readScreenText(src, { language, every, onProgress, onEntry
     },
   });
 
-  const video = await openVideo(src);
+  // Opened inside the try, so a video that fails to open still shuts the text reader down.
+  let video = null;
   const entries = [];
   try {
+    video = await openVideo(src);
     const duration = video.duration;
     let lastPrint = null;
     let showing = null;
@@ -118,8 +120,8 @@ export async function readScreenText(src, { language, every, onProgress, onEntry
     }
   } finally {
     await worker.terminate();
-    video.removeAttribute("src");
-    video.load();
+    video?.removeAttribute("src");
+    video?.load();
   }
   onProgress({ progress: 1, detail: "" });
   return entries;

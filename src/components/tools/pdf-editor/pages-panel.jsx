@@ -6,23 +6,29 @@ import { Sheet } from "@/components/ui/dialog";
 import { renderThumbnail } from "@/lib/tools/pdf/pdfjs";
 import { cn } from "@/lib/utils";
 
-const thumbnails = new Map();
+// Cached per opened document (not per source number), so a newly opened PDF never shows the last one's pages.
+const thumbnails = new WeakMap();
+const cacheFor = (pdf) => {
+  if (!thumbnails.has(pdf)) thumbnails.set(pdf, new Map());
+  return thumbnails.get(pdf);
+};
 
 function Thumbnail({ entry, pdf }) {
-  const key = `${entry.source}:${entry.index}`;
-  const [src, setSrc] = useState(() => thumbnails.get(key) ?? null);
+  const cached = pdf && entry.index !== null ? cacheFor(pdf).get(entry.index) : null;
+  const [rendered, setRendered] = useState(null);
+  const src = cached ?? (rendered?.pdf === pdf && rendered.index === entry.index ? rendered.url : null);
 
   useEffect(() => {
-    if (src || entry.index === null || !pdf) return;
+    if (cached || entry.index === null || !pdf) return;
     let cancelled = false;
     renderThumbnail(pdf, entry.index).then((url) => {
-      thumbnails.set(key, url);
-      if (!cancelled) setSrc(url);
+      cacheFor(pdf).set(entry.index, url);
+      if (!cancelled) setRendered({ pdf, index: entry.index, url });
     });
     return () => {
       cancelled = true;
     };
-  }, [src, key, pdf, entry.index]);
+  }, [cached, pdf, entry.index]);
 
   const sideways = entry.rotation % 180 !== 0;
   const ratio = sideways ? entry.width / entry.height : entry.height / entry.width;

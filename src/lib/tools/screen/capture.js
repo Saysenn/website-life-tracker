@@ -370,8 +370,9 @@ const even = (value) => Math.max(2, Math.round(value / 2) * 2);
 
 /** Draws the captured screen (optionally cropped), a webcam bubble and a watermark onto one canvas and streams it. */
 export class Compositor {
-  constructor({ main, camera, fps, maxHeight, crop, cam, mark }) {
+  constructor({ main, camera, fps, maxHeight, crop, cam, mark, fx }) {
     this.main = new FrameSource(main);
+    this.fx = fx ?? null; // tutorial effects (zoom, lens, drawings), see tutorial.js
     this.camera = camera ? new FrameSource(camera) : null;
     this.fps = fps;
     this.maxHeight = maxHeight;
@@ -410,25 +411,55 @@ export class Compositor {
     return { x: crop.x * sw, y: crop.y * sh, w: Math.max(2, crop.w * sw), h: Math.max(2, crop.h * sh) };
   }
 
-  draw() {
-    const { ctx, canvas } = this;
-    const frame = this.main.image;
-    if (!frame || !this.main.width) return;
-    const W = canvas.width;
-    const H = canvas.height;
+  /** Where the captured picture sits in the output: source crop, scale and the letterbox offset. */
+  layout() {
+    const W = this.canvas.width;
+    const H = this.canvas.height;
     const crop = this.cropPixels();
     const scale = Math.min(W / crop.w, H / crop.h);
     const dw = crop.w * scale;
     const dh = crop.h * scale;
+    return { W, H, crop, scale, dw, dh, ox: (W - dw) / 2, oy: (H - dh) / 2 };
+  }
+
+  /** A point on the whole captured frame (0–1) → the same point on the un-zoomed output (0–1), or null if cropped out. */
+  frameToOutput(fx, fy) {
+    const { W, H, crop, scale, ox, oy } = this.layout();
+    const x = (fx * this.main.width - crop.x) * scale + ox;
+    const y = (fy * this.main.height - crop.y) * scale + oy;
+    if (x < 0 || y < 0 || x > W || y > H) return null;
+    return { x: x / W, y: y / H };
+  }
+
+  draw() {
+    const { ctx, fx } = this;
+    const frame = this.main.image;
+    if (!frame || !this.main.width) return;
+    const { W, H, crop, scale, dw, dh, ox, oy } = this.layout();
+    const now = fx?.step();
     ctx.fillStyle = "#000";
-    if (Math.abs(dw - W) > 1 || Math.abs(dh - H) > 1) ctx.fillRect(0, 0, W, H);
+    if (Math.abs(dw - W) > 1 || Math.abs(dh - H) > 1 || (fx && fx.zoom > 1)) ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    if (fx && fx.zoom > 1.001) {
+      const view = fx.view(W, H);
+      ctx.setTransform(fx.zoom, 0, 0, fx.zoom, -view.x * fx.zoom, -view.y * fx.zoom);
+      ctx.imageSmoothingQuality = "high";
+    }
     try {
-      ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, ox, oy, dw, dh);
     } catch {
+      ctx.restore();
       return;
+    }
+    fx?.drawAttached(ctx, W, H, now);
+    ctx.restore();
+    if (fx) {
+      // The lens samples the source frame directly, so it stays sharp even on top of a zoom.
+      fx.drawLens(ctx, W, H, (bx, by) => ({ image: frame, sx: crop.x + (bx * W - ox) / scale, sy: crop.y + (by * H - oy) / scale, scale: 1 / scale }));
     }
     if (this.camera?.image && this.camera.width && this.cam) this.drawCamera(W, H);
     if (this.mark && this.mark.kind !== "off") this.drawMark(W, H);
+    fx?.drawKeys(ctx, W, H, now);
   }
 
   drawCamera(W, H) {

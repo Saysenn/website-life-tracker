@@ -16,12 +16,14 @@ import { Cancelled, Cleaner, decodeToMono, encodeMp3, encodeWav, PRESETS, SAMPLE
 import { cn } from "@/lib/utils";
 import { DropZone, ProgressBar } from "../drop-zone";
 import { MediaLibrary } from "../media-library";
+import { deliver, savedWhere } from "@/lib/tools/save-folder";
+import { SaveLocation, useSaveFolder } from "../save-location";
 import { Group, Row, Slider, TOUCH_SEGMENTS } from "../screen/panels";
 import { ToolHeader } from "../tool-header";
 import { Choice, Select } from "../video/controls";
 import { LiveWave, Waveform } from "./waveform";
 
-const DEFAULTS = { preset: "balanced", ...PRESETS.balanced, format: "wav", micId: "", browserFilter: false };
+const DEFAULTS = { preset: "balanced", ...PRESETS.balanced, format: "wav", micId: "", browserFilter: false, saveTo: "downloads", saveTakes: false };
 const CLEAN_KEYS = ["ai", "aiMix", "reduce", "hum", "rumble", "gate", "clarity", "loudness", "trim"];
 
 const PRESET_OPTIONS = [
@@ -174,6 +176,7 @@ export function VoiceRecorder() {
   const [result, setResult] = useState(null);
   const [work, setWork] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const folder = useSaveFolder("voice", "music");
   const cleaner = useRef(null);
   const runId = useRef(0);
 
@@ -226,6 +229,10 @@ export function VoiceRecorder() {
     browserFilter: cfg.browserFilter,
     onDone: (blob, duration, name) => {
       load(blob, name, duration);
+      // The raw take goes to the save location too when asked; it's always kept in the list below.
+      if (cfg.saveTakes && cfg.saveTo !== "browser") {
+        deliver({ saveTo: cfg.saveTo, folder, name, blob }).then((where) => toast.success("Recording saved", { description: `${name} · ${savedWhere(where, folder)}` }));
+      }
       return addItem({ id: newId(), tool: "voice", kind: "audio", name, mime: blob.type, size: blob.size, duration, createdAt: Date.now(), blob, badge: "Original" });
     },
   });
@@ -267,9 +274,9 @@ export function VoiceRecorder() {
       const mp3 = cfg.format === "mp3";
       const blob = mp3 ? await encodeMp3(result.samples) : result.wav;
       const name = `${baseName(source.name).replace(/ \(clean\)$/, "")} (clean).${mp3 ? "mp3" : "wav"}`;
-      downloadBlob(blob, name);
+      const where = await deliver({ saveTo: cfg.saveTo, folder, name, blob });
       addItem({ id: newId(), tool: "voice", kind: "audio", name, mime: blob.type, size: blob.size, duration: result.samples.length / SAMPLE_RATE, createdAt: Date.now(), blob, badge: "Clean" });
-      toast.success("Clean file downloaded", { description: name });
+      toast.success("Clean file saved", { description: `${name} · ${savedWhere(where, folder)}` });
     } catch (error) {
       toast.error("Couldn't make the file", { description: error?.message });
     } finally {
@@ -483,11 +490,18 @@ export function VoiceRecorder() {
                   className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-ink text-base font-semibold text-ground transition-colors hover:bg-ink/85 disabled:opacity-50"
                 >
                   {exporting ? <RefreshCw className="size-[1.8rem] animate-spin" /> : <Download className="size-[1.8rem]" />}
-                  Download clean {cfg.format.toUpperCase()}
+                  {cfg.saveTo === "downloads" ? "Download" : "Save"} clean {cfg.format.toUpperCase()}
                 </button>
               </div>
             </>
           )}
+
+          <Group title="Where files go">
+            <SaveLocation value={cfg.saveTo} onChange={(saveTo) => set({ saveTo })} folder={folder} what="cleaned files" />
+            <Row label="Also save each raw recording" hint="Every take is kept in the list below either way; this also puts the untouched original where your files go." disabled={cfg.saveTo === "browser"}>
+              <Switch checked={cfg.saveTakes && cfg.saveTo !== "browser"} onCheckedChange={(saveTakes) => set({ saveTakes })} disabled={cfg.saveTo === "browser"} />
+            </Row>
+          </Group>
         </section>
       </div>
 

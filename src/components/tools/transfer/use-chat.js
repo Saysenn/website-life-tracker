@@ -39,6 +39,7 @@ export function useChat(syncUrl, { role, onPeerMessages, onPeerUnsent } = {}) {
   const messagesRef = useRef(state.messages);
   // Ids this side unsent, so a poll already in flight cannot bring them back.
   const gone = useRef(new Set());
+  const alive = useRef(0);
 
   useEffect(() => {
     onPeer.current = onPeerMessages;
@@ -48,6 +49,8 @@ export function useChat(syncUrl, { role, onPeerMessages, onPeerUnsent } = {}) {
 
   const run = useCallback(async () => {
     clearTimeout(timer.current);
+    // Bumped on unmount: a sync still in flight then must not apply its result or schedule another poll.
+    const generation = alive.current;
     try {
       const after = cursor.current;
       const data = await call(syncUrl, {
@@ -58,6 +61,7 @@ export function useChat(syncUrl, { role, onPeerMessages, onPeerUnsent } = {}) {
           visible: document.visibilityState === "visible",
         },
       });
+      if (generation !== alive.current) return;
       const first = after === 0;
       const vanished = data.ids
         ? messagesRef.current.filter((message) => message.id <= after && !data.ids.includes(message.id))
@@ -78,8 +82,10 @@ export function useChat(syncUrl, { role, onPeerMessages, onPeerUnsent } = {}) {
         if (fromPeer.length) onPeer.current?.(fromPeer, data);
       }
     } catch (error) {
+      if (generation !== alive.current) return;
       if ([401, 404].includes(error.status)) return setEnded(error.message);
     }
+    clearTimeout(timer.current);
     timer.current = setTimeout(() => tick.current?.(), document.visibilityState === "visible" ? FAST : SLOW);
   }, [syncUrl, role]);
 
@@ -92,6 +98,7 @@ export function useChat(syncUrl, { role, onPeerMessages, onPeerUnsent } = {}) {
     const wake = () => document.visibilityState === "visible" && run();
     document.addEventListener("visibilitychange", wake);
     return () => {
+      alive.current += 1;
       clearTimeout(timer.current);
       document.removeEventListener("visibilitychange", wake);
     };

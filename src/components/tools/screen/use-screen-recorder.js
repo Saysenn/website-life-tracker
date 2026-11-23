@@ -5,12 +5,12 @@ import { toast } from "sonner";
 import { downloadBlob } from "@/lib/tools/files";
 import { newId, saveMedia, stamp, thumbnail } from "@/lib/tools/media-store";
 import { startJournal } from "@/lib/tools/recording-journal";
+import { deliver, freeName, savedWhere } from "@/lib/tools/save-folder";
 import {
   AudioMixer,
   bitrateFor,
   canCaptureScreen,
   CAM_SCALES,
-  canvasBlob,
   Compositor,
   extensionFor,
   fixWebmDuration,
@@ -22,6 +22,7 @@ import {
   stopStream,
   Ticker,
 } from "@/lib/tools/screen/capture";
+import { mapInput, TUTORIAL_DEFAULTS, TutorialFx } from "@/lib/tools/screen/tutorial";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -47,6 +48,8 @@ export const markOptions = (cfg, logo) => ({
   opacity: cfg.markOpacity,
 });
 
+export const tutorialOptions = (cfg) => Object.fromEntries(Object.keys(TUTORIAL_DEFAULTS).map((key) => [key, cfg[key] ?? TUTORIAL_DEFAULTS[key]]));
+
 function cancelled(error) {
   return error?.name === "NotAllowedError" || error?.name === "AbortError";
 }
@@ -54,20 +57,6 @@ function cancelled(error) {
 function elapsedOf(s) {
   if (!s?.startedAt) return 0;
   return (s.pausedAt ?? performance.now()) - s.startedAt - s.pausedTotal;
-}
-
-/** Writes a finished file into the chosen output folder. Returns the handle, or null without access. */
-async function writeToFolder(folder, name, blob) {
-  if (!folder?.handle || folder.permission !== "granted") return null;
-  try {
-    const handle = await folder.handle.getFileHandle(name, { create: true });
-    const writable = await handle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    return handle;
-  } catch {
-    return null;
-  }
 }
 
 export function useScreenRecorder({ settings, logo, folder, onSaved }) {
@@ -105,45 +94,9 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
     return null;
   };
 
-  const saveShot = useCallback(async (frame, crop, { quiet = false } = {}) => {
-    const { settings: cfg, folder: dir, onSaved: saved } = latest.current;
-    const area = crop ?? { x: 0, y: 0, w: 1, h: 1 };
-    const sx = Math.round(area.x * frame.width);
-    const sy = Math.round(area.y * frame.height);
-    const width = Math.max(2, Math.round(area.w * frame.width));
-    const height = Math.max(2, Math.round(area.h * frame.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext("2d").drawImage(frame.image, sx, sy, width, height, 0, 0, width, height);
-    const jpg = cfg.imageFormat === "jpg";
-    const blob = await canvasBlob(canvas, jpg ? "image/jpeg" : "image/png", jpg ? cfg.imageQuality : undefined);
-    const name = `${cfg.prefix || "Recording"} ${stamp()}${quiet ? `-${Math.round(performance.now()) % 1000}` : ""}.${jpg ? "jpg" : "png"}`;
-    const item = {
-      id: newId(),
-      tool: "screen",
-      kind: "image",
-      name,
-      mime: blob.type,
-      size: blob.size,
-      width,
-      height,
-      createdAt: Date.now(),
-      blob,
-      thumb: thumbnail(canvas, width, height),
-    };
-    await saveMedia(item).catch(() => {});
-    await writeToFolder(dir, name, blob);
-    if (cfg.clipboard && !jpg && typeof ClipboardItem !== "undefined") {
-      navigator.clipboard?.write([new ClipboardItem({ "image/png": blob })]).catch(() => {});
-    }
-    saved?.(item);
-    if (!quiet) toast.success("Screenshot saved", { description: `${width}×${height}${cfg.clipboard && !jpg ? " · copied" : ""}` });
-  }, []);
-
   const finish = useCallback(
     async (s) => {
-      const { settings: cfg, folder: dir, onSaved: saved } = latest.current;
+      const { folder: dir, onSaved: saved } = latest.current;
       const duration = s.endElapsed ?? elapsedOf(s);
       const frame = currentFrame(s);
       if (!s.thumb && frame) s.thumb = thumbnail(frame.image, frame.width, frame.height);
@@ -192,14 +145,12 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       }
       // Saved for good, so the crash-safe copy can go.
       s.journal?.discard();
-      if (blob && !handle) {
-        const written = await writeToFolder(dir, s.name, blob);
-        if (!written && cfg.autoDownload) downloadBlob(blob, s.name);
-      }
+      let where = { where: "folder" };
+      if (blob && !handle) where = await deliver({ saveTo: s.saveTo, folder: dir, name: s.name, blob });
       saved?.(item);
       setPhase("idle");
       setClock({ elapsed: 0, bytes: 0 });
-      toast.success(s.hasVideo ? "Recording saved" : "Audio saved", { description: handle ? `${s.name} · in your folder` : s.name });
+      toast.success(s.hasVideo ? "Recording saved" : "Audio saved", { description: `${s.name} · ${savedWhere(where, dir)}` });
     },
     [cleanup],
   );
@@ -234,15 +185,10 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
         if (frame) s.thumb = thumbnail(frame.image, frame.width, frame.height);
         if (s.thumb) s.journal?.update({ thumb: s.thumb });
       }
-      if (cfg.repeat && s.hasVideo && !s.pausedAt && elapsed - s.lastShot >= cfg.repeatSeconds * 1000) {
-        s.lastShot = elapsed;
-        const frame = currentFrame(s);
-        if (frame) saveShot(frame, null, { quiet: true }).catch(() => {});
-      }
       if (cfg.autoStop === "time" && elapsed >= cfg.autoStopMinutes * 60000) stop();
       if (cfg.autoStop === "size" && s.bytes >= cfg.autoStopMb * 1024 * 1024) stop();
     },
-    [saveShot, stop],
+    [stop],
   );
 
   const begin = useCallback(
@@ -258,7 +204,8 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       // size change: everything after it comes out garbled. Drawing through a fixed-size canvas keeps the video
       // one size and letterboxes the resized picture, like a desktop recorder does. WebM copes on its own.
       const fixedSize = Boolean(s.display) && type.startsWith("video/mp4");
-      const composite = main && (s.crop || overlayCamera || markOn || fixedSize);
+      // Tutorial mode draws zooms, the lens and drawings into the picture, so it always goes through the canvas.
+      const composite = main && (s.crop || overlayCamera || markOn || fixedSize || cfg.tutorial);
 
       let videoTrack = null;
       if (main) {
@@ -271,6 +218,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
             crop: s.crop,
             cam: overlayCamera ? camOptions(cfg) : null,
             mark: markOn ? markOptions(cfg, mark) : null,
+            fx: cfg.tutorial ? new TutorialFx(tutorialOptions(cfg)) : null,
           });
           videoTrack = await s.compositor.start();
           s.width = s.compositor.canvas.width;
@@ -303,7 +251,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       setPreview(videoTrack ? new MediaStream([s.compositor ? videoTrack : main]) : null);
       s.hasVideo = Boolean(videoTrack);
       s.type = s.hasVideo ? type : pickType(cfg.format, false);
-      setInfo({ width: s.width, height: s.height, fps: cfg.fps, type: s.type, composite: Boolean(composite), camera: Boolean(overlayCamera && s.compositor) });
+      setInfo({ width: s.width, height: s.height, fps: cfg.fps, type: s.type, composite: Boolean(composite), camera: Boolean(overlayCamera && s.compositor), tutorial: Boolean(s.compositor?.fx) });
 
       for (let n = cfg.countdown; n > 0; n -= 1) {
         setPhase("countdown");
@@ -350,8 +298,10 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
         return;
       }
 
-      if (dir?.handle && dir.permission === "granted") {
+      s.saveTo = cfg.saveTo;
+      if (cfg.saveTo === "folder" && dir?.handle && dir.permission === "granted") {
         try {
+          s.name = await freeName(dir.handle, s.name);
           s.fileHandle = await dir.handle.getFileHandle(s.name, { create: true });
           s.writer = await s.fileHandle.createWritable();
         } catch {
@@ -380,7 +330,6 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       };
 
       s.recorder = recorder;
-      s.lastShot = 0;
       recorder.start(1000);
       s.startedAt = performance.now();
       s.pausedTotal = 0;
@@ -463,47 +412,6 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
     setClock({ elapsed: elapsedOf(s), bytes: s.bytes });
   }, []);
 
-  const screenshot = useCallback(
-    async ({ area } = {}) => {
-      const s = session.current;
-      const frame = currentFrame(s);
-      if (frame) return saveShot(frame).catch((error) => toast.error(error.message));
-      if (s?.display && phase === "selecting") {
-        const source = new FrameSource(s.display.getVideoTracks()[0].clone());
-        await Promise.race([source.ready, wait(1500)]);
-        await saveShot({ image: source.image, width: source.width, height: source.height }, area).catch((error) => toast.error(error.message));
-        source.track.stop();
-        return source.close();
-      }
-      if (s) return;
-
-      const cfg = latest.current.settings;
-      let stream;
-      try {
-        stream =
-          cfg.mode === "webcam"
-            ? await getCamera({ deviceId: cfg.camId })
-            : await getDisplay({ mode: cfg.mode === "audio" ? "screen" : cfg.mode, fps: 30, systemAudio: false });
-      } catch (error) {
-        if (!cancelled(error)) toast.error("Couldn't take a screenshot", { description: error?.message });
-        return;
-      }
-      const source = new FrameSource(stream.getVideoTracks()[0]);
-      await Promise.race([source.ready, wait(2500)]);
-      await wait(250);
-      if (source.width) {
-        await saveShot({ image: source.image, width: source.width, height: source.height }, cfg.mode === "area" ? cfg.area : null).catch((error) =>
-          toast.error(error.message),
-        );
-      } else {
-        toast.error("Couldn't grab a frame from the screen");
-      }
-      source.close();
-      stopStream(stream);
-    },
-    [phase, saveShot],
-  );
-
   // Live changes while recording: volume, muting the mic, webcam bubble and watermark.
   useEffect(() => {
     const mixer = session.current?.mixer;
@@ -519,6 +427,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       cam: compositor.camera && settings.cam ? camOptions(settings) : null,
       mark: compositor.mark || settings.mark !== "off" ? markOptions(settings, logo) : null,
     });
+    compositor.fx?.update(tutorialOptions(settings));
   }, [settings, logo]);
 
   // Warn before closing the tab mid-recording, and show the timer in the tab title.
@@ -561,5 +470,41 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
 
   const level = useCallback((id) => session.current?.mixer?.level(id) ?? 0, []);
 
-  return { phase, clock, countdown, preview, selecting, info, record, stop, togglePause, screenshot, level };
+  /** The live tutorial effects, or null when the recording runs without tutorial mode. */
+  const tutorial = useCallback(() => session.current?.compositor?.fx ?? null, []);
+
+  /**
+   * An event from the browser extension (a click, the typing caret, the mouse or a shortcut in a browser tab),
+   * placed onto the recording. Ignored when the event's tab isn't what's being recorded.
+   */
+  const tutorialInput = useCallback((event) => {
+    const s = session.current;
+    const fx = s?.compositor?.fx;
+    if (!fx || s.recorder?.state !== "recording") return;
+    if (event.type === "key") return fx.key(event.label);
+    const track = s.display?.getVideoTracks()[0];
+    const surface = track?.getSettings().displaySurface;
+    if (surface === "browser") {
+      // The extension tags every tab with a capture handle, so a shared tab says which one it is.
+      // Without one, trust the tab you're working in.
+      const handle = track.getCaptureHandle?.()?.handle;
+      if (handle ? event.handle !== handle : !event.focused) return;
+    } else if (!event.focused) return;
+    const frame = mapInput(event, surface);
+    const at = frame && s.compositor.frameToOutput(frame.x, frame.y);
+    if (!at) return;
+    if (event.type === "click") fx.click(at.x, at.y);
+    else if (event.type === "caret") fx.caret(at.x, at.y);
+    else if (event.type === "move" && s.lensFollow) fx.pointer(at.x, at.y);
+  }, []);
+
+  /** Lens follows the mouse in browser tabs (via the extension) while the lens tool is on. */
+  const setLensFollow = useCallback((on) => {
+    const s = session.current;
+    if (!s) return;
+    s.lensFollow = on;
+    if (!on) s.compositor?.fx?.lensAt(null);
+  }, []);
+
+  return { phase, clock, countdown, preview, selecting, info, record, stop, togglePause, level, tutorial, tutorialInput, setLensFollow };
 }
