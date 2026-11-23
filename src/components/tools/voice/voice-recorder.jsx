@@ -1,7 +1,7 @@
 "use client";
 
 import { AudioLines, Download, Mic, Pause, Play, RefreshCw, Sparkles, Square } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { Page } from "@/components/ui/page";
 import { Segmented } from "@/components/ui/segmented";
@@ -15,6 +15,7 @@ import { extensionFor, listDevices, pickType } from "@/lib/tools/screen/capture"
 import { Cancelled, Cleaner, decodeToMono, encodeMp3, encodeWav, PRESETS, SAMPLE_RATE } from "@/lib/tools/voice/clean";
 import { cn } from "@/lib/utils";
 import { DropZone, ProgressBar } from "../drop-zone";
+import { InstallApp } from "../install-app";
 import { MediaLibrary } from "../media-library";
 import { deliver, savedWhere } from "@/lib/tools/save-folder";
 import { SaveLocation, useSaveFolder } from "../save-location";
@@ -24,6 +25,9 @@ import { Choice, Select } from "../video/controls";
 import { LiveWave, Waveform } from "./waveform";
 
 const DEFAULTS = { preset: "balanced", ...PRESETS.balanced, format: "wav", micId: "", saveTo: "downloads", saveTakes: false };
+const noop = () => () => {};
+const getIsMac = () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
 const CLEAN_KEYS = ["ai", "aiMix", "reduce", "hum", "rumble", "gate", "clarity", "loudness", "trim"];
 
 const PRESET_OPTIONS = [
@@ -302,6 +306,7 @@ export function VoiceRecorder() {
   };
 
   const recording = mic.state !== "idle";
+  const isMac = useSyncExternalStore(noop, getIsMac, () => false);
 
   return (
     <Page className="max-w-[120rem]">
@@ -534,6 +539,10 @@ export function VoiceRecorder() {
           },
         }}
       />
+
+      <section className="mt-6 rounded-2xl bg-surface px-3 pb-1 shadow-card sm:px-4">
+        <InstallApp name="Voice Recorder" isMac={isMac} />
+      </section>
     </Page>
   );
 }

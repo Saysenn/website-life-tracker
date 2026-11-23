@@ -93,6 +93,6 @@ export default function proxy(request, event) {
 }
 
 export const config = {
-  // The recorder app's manifest and icons are fetched by the browser without cookies, so they skip the login check.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt|recorder.webmanifest|recorder-icon-).*)"],
+  // The installable apps' manifests and icons are fetched by the browser without cookies, so they skip the login check.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt|recorder.webmanifest|recorder-icon-|apps/).*)"],
 };

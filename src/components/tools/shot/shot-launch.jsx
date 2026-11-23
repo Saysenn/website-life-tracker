@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { downloadBlob } from "@/lib/tools/files";
 import { buildShotExtension, SHOT_EXTENSION_VERSION, shotBookmarklet } from "@/lib/tools/shot/extension";
 import { cn } from "@/lib/utils";
+import { InstallApp } from "../install-app";
 import { Group, Row } from "../screen/panels";
 
 const noop = () => () => {};
@@ -83,6 +84,8 @@ export function ShotLaunch({ extension, isMac }) {
 
   return (
     <div className="flex flex-col gap-3">
+      <InstallApp name="Screenshotr" isMac={isMac} />
+
       <Group title="Browser extension">
         <Row
           label="Capture any tab with a shortcut"

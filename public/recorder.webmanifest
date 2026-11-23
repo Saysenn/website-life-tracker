@@ -12,9 +12,5 @@
     { "src": "/recorder-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/recorder-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/recorder-icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ],
-  "shortcuts": [
-    { "name": "Screen recorder", "url": "/tools/screen-recorder", "icons": [{ "src": "/recorder-icon-192.png", "sizes": "192x192" }] },
-    { "name": "Voice recorder", "url": "/tools/voice-recorder", "icons": [{ "src": "/recorder-icon-192.png", "sizes": "192x192" }] }
   ]
 }
