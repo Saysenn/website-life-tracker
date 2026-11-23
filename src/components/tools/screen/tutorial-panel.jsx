@@ -51,7 +51,7 @@ export function TutorialPanel({ cfg, set, extension, live, isMac }) {
       <Group title="How you drive it">
         <div className="flex flex-col gap-2 py-3 text-sm text-ink-2">
           <p>
-            <b>In browser tabs:</b> with the extension installed (Launch tab), your real clicks zoom in, typing keeps the zoom following the cursor, and shortcuts like{" "}
+            <b>In browser tabs:</b> with the extension installed (Shortcuts &amp; app tab), your real clicks zoom in, typing keeps the zoom following the cursor, and shortcuts like{" "}
             {isMac ? "⌘ C" : "Ctrl C"} pop up on screen. Press <b>{isMac ? "⌥ ⇧ D" : "Alt Shift D"}</b> to draw right on the page.{" "}
             <span className={cn("font-semibold", extension ? "text-success" : "text-ink-3")}>{extension ? "Extension connected." : "Extension not installed."}</span>
           </p>

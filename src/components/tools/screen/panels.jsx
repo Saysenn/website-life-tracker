@@ -114,7 +114,7 @@ const SIZES = [
   { value: "l", label: "Large" },
 ];
 
-export function VideoPanel({ cfg, set, support, locked }) {
+export function VideoPanel({ cfg, set, support, locked, logoUrl, onLogo }) {
   return (
     <div className="flex flex-col gap-3">
       <Group title="Format">
@@ -192,7 +192,13 @@ export function VideoPanel({ cfg, set, support, locked }) {
             )}
           </div>
         </Row>
+        {support.popOut && (
+          <Row label="Floating control bar" hint="A small always-on-top window with the timer, pause, stop and mic, so you can control the recording from any app.">
+            <Switch checked={cfg.miniBar} onCheckedChange={(miniBar) => set({ miniBar })} />
+          </Row>
+        )}
       </Group>
+      <LogoPanel cfg={cfg} set={set} logoUrl={logoUrl} onLogo={onLogo} />
     </div>
   );
 }
@@ -461,11 +467,11 @@ export function WebcamPanel({ cfg, set, devices, onAllow, locked, live, liveCame
   );
 }
 
-export function LogoPanel({ cfg, set, logoUrl, onLogo }) {
+function LogoPanel({ cfg, set, logoUrl, onLogo }) {
   const off = cfg.mark === "off";
   return (
-    <Group>
-      <Row label="Add a logo or text" hint="Stamps a watermark on every frame. Can be changed while recording.">
+    <Group title="Watermark">
+      <Row label="Logo or text on the video" hint="Stamps your logo or name on every frame. Can be changed while recording.">
         <div className="w-full sm:w-64">
           <Choice
             value={cfg.mark}
@@ -510,17 +516,21 @@ export function LogoPanel({ cfg, set, logoUrl, onLogo }) {
           )}
         </Row>
       )}
-      <Row label="Position" disabled={off}>
-        <CornerPicker value={cfg.markPosition} onChange={(markPosition) => set({ markPosition })} />
-      </Row>
-      <Row label="Size" disabled={off}>
-        <div className="w-full sm:w-64">
-          <Choice value={cfg.markSize} onChange={(markSize) => set({ markSize })} options={SIZES} disabled={off} />
-        </div>
-      </Row>
-      <Row label="Opacity" disabled={off}>
-        <Slider label="Opacity" value={cfg.markOpacity} min={0.1} max={1} onChange={(markOpacity) => set({ markOpacity })} disabled={off} />
-      </Row>
+      {!off && (
+        <>
+          <Row label="Position">
+            <CornerPicker value={cfg.markPosition} onChange={(markPosition) => set({ markPosition })} />
+          </Row>
+          <Row label="Size">
+            <div className="w-full sm:w-64">
+              <Choice value={cfg.markSize} onChange={(markSize) => set({ markSize })} options={SIZES} />
+            </div>
+          </Row>
+          <Row label="Opacity">
+            <Slider label="Opacity" value={cfg.markOpacity} min={0.1} max={1} onChange={(markOpacity) => set({ markOpacity })} />
+          </Row>
+        </>
+      )}
     </Group>
   );
 }
@@ -559,8 +569,8 @@ export const HOTKEYS = [
 
 export function HotkeysPanel({ cfg, set, isMac }) {
   return (
-    <Group>
-      <Row label="Keyboard shortcuts" hint="Work while this page or the floating bar is focused. For shortcuts in every tab, add the extension under Launch.">
+    <Group title="Shortcuts on this page">
+      <Row label="Keyboard shortcuts" hint="Work while this page or the floating bar is focused. For shortcuts in every tab, add the browser extension below.">
         <Switch checked={cfg.hotkeys} onCheckedChange={(hotkeys) => set({ hotkeys })} />
       </Row>
       {HOTKEYS.map(([mod, key, label]) => (
@@ -574,9 +584,6 @@ export function HotkeysPanel({ cfg, set, isMac }) {
           </span>
         </Row>
       ))}
-      <Row label="Floating control bar" hint="When you press REC, a small always-on-top window opens with the timer, mic, webcam, pause and stop — plus the tutorial tools and a live pad to click and draw on when Tutorial mode is on. It stays on screen while you switch tabs or apps (Chrome and Edge).">
-        <Switch checked={cfg.miniBar} onCheckedChange={(miniBar) => set({ miniBar })} />
-      </Row>
     </Group>
   );
 }

@@ -56,7 +56,7 @@ export function BackdropControls({ value, onChange, compact = false }) {
 }
 
 /** All of Screenshotr's settings. */
-export function ShotSettings({ s, set, folder, isMac }) {
+export function ShotSettings({ s, set, folder, isMac, onKeep }) {
   const mod = isMac ? "⌘" : "Ctrl";
   const alt = isMac ? "⌥" : "Alt";
   const shift = isMac ? "⇧" : "Shift";
@@ -97,7 +97,7 @@ export function ShotSettings({ s, set, folder, isMac }) {
             label="Keep the screen shared"
             hint="Ask once, then every capture is instant until you stop sharing or close the tab. The browser shows that the screen is being shared."
           >
-            <Switch checked={s.keep} onCheckedChange={(keep) => set({ keep })} aria-label="Keep the screen shared" />
+            <Switch checked={s.keep} onCheckedChange={onKeep} aria-label="Keep the screen shared" />
           </Row>
           <Row label="Adjust the area before taking it" hint="Off: the picture is taken the moment you let go. On: drag the corners or nudge with the arrow keys, then press Enter.">
             <Switch checked={s.areaConfirm} onCheckedChange={(areaConfirm) => set({ areaConfirm })} aria-label="Adjust the area before taking it" />

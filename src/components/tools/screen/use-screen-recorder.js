@@ -9,7 +9,6 @@ import { deliver, freeName, savedWhere } from "@/lib/tools/save-folder";
 import {
   AudioMixer,
   bitrateFor,
-  canCaptureScreen,
   CAM_SCALES,
   Compositor,
   extensionFor,
@@ -194,8 +193,7 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
   const begin = useCallback(
     async (s) => {
       const { settings: cfg, logo: mark, folder: dir } = latest.current;
-      const audioOnly = cfg.mode === "audio";
-      const main = audioOnly ? null : (s.display ?? s.camera)?.getVideoTracks()[0];
+      const main = (s.display ?? s.camera)?.getVideoTracks()[0];
       const overlayCamera = s.display && s.camera ? s.camera.getVideoTracks()[0] : null;
       const maxHeight = cfg.resolution === "original" ? 0 : Number(cfg.resolution);
       const markOn = markOptions(cfg, mark).kind !== "off" && (cfg.mark !== "text" || cfg.markText.trim());
@@ -358,9 +356,9 @@ export function useScreenRecorder({ settings, logo, folder, onSaved }) {
       try {
         if (cfg.mode === "webcam") {
           s.camera = await getCamera({ deviceId: cfg.camId, fps: cfg.fps });
-        } else if (cfg.mode !== "audio" || (cfg.systemAudio && canCaptureScreen())) {
-          s.display = await getDisplay({ mode: cfg.mode === "audio" ? "tab" : cfg.mode, fps: cfg.fps, systemAudio: cfg.systemAudio });
-          if (cfg.mode !== "audio" && cfg.cam) {
+        } else {
+          s.display = await getDisplay({ mode: cfg.mode, fps: cfg.fps, systemAudio: cfg.systemAudio });
+          if (cfg.cam) {
             s.camera = await getCamera({ deviceId: cfg.camId, fps: cfg.fps }).catch(() => {
               toast.error("Couldn't open the webcam — recording without it");
               return null;

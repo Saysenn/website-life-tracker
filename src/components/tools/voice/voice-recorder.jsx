@@ -23,15 +23,21 @@ import { ToolHeader } from "../tool-header";
 import { Choice, Select } from "../video/controls";
 import { LiveWave, Waveform } from "./waveform";
 
-const DEFAULTS = { preset: "balanced", ...PRESETS.balanced, format: "wav", micId: "", browserFilter: false, saveTo: "downloads", saveTakes: false };
+const DEFAULTS = { preset: "balanced", ...PRESETS.balanced, format: "wav", micId: "", saveTo: "downloads", saveTakes: false };
 const CLEAN_KEYS = ["ai", "aiMix", "reduce", "hum", "rumble", "gate", "clarity", "loudness", "trim"];
 
 const PRESET_OPTIONS = [
   { value: "light", label: "Light" },
   { value: "balanced", label: "Balanced" },
   { value: "strong", label: "Strong" },
-  { value: "custom", label: "Custom" },
 ];
+
+const PRESET_HINTS = {
+  light: "Takes the edge off background noise and leaves your voice untouched.",
+  balanced: "Removes most background noise. Right for most recordings.",
+  strong: "For loud rooms: removes as much noise as possible.",
+  custom: "Your own mix. Pick a strength above to start over from it.",
+};
 
 const FEATURES = [
   ["AI noise removal", "A neural network trained on speech removes fans, traffic, keyboards, hiss and room noise."],
@@ -42,7 +48,7 @@ const FEATURES = [
 const dbLabel = (value) => (value <= -90 ? "silent" : `${Math.round(value)} dB`);
 
 /** Records the microphone, with pause, a live level graph and a timer. */
-function useMicRecorder({ micId, browserFilter, onDone }) {
+function useMicRecorder({ micId, onDone }) {
   const [state, setState] = useState("idle");
   const [elapsed, setElapsed] = useState(0);
   const [analyser, setAnalyser] = useState(null);
@@ -68,9 +74,10 @@ function useMicRecorder({ micId, browserFilter, onDone }) {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...(micId ? { deviceId: { exact: micId } } : {}),
-          noiseSuppression: browserFilter,
-          echoCancellation: browserFilter,
-          autoGainControl: browserFilter,
+          // The untouched sound: the cleaner does a much better job than the browser's own filters.
+          noiseSuppression: false,
+          echoCancellation: false,
+          autoGainControl: false,
           channelCount: { ideal: 1 },
           sampleRate: { ideal: SAMPLE_RATE },
         },
@@ -176,6 +183,7 @@ export function VoiceRecorder() {
   const [result, setResult] = useState(null);
   const [work, setWork] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [tuning, setTuning] = useState(cfg.preset === "custom");
   const folder = useSaveFolder("voice", "music");
   const cleaner = useRef(null);
   const runId = useRef(0);
@@ -226,7 +234,6 @@ export function VoiceRecorder() {
 
   const mic = useMicRecorder({
     micId: cfg.micId,
-    browserFilter: cfg.browserFilter,
     onDone: (blob, duration, name) => {
       load(blob, name, duration);
       // The raw take goes to the save location too when asked; it's always kept in the list below.
@@ -366,13 +373,6 @@ export function VoiceRecorder() {
               </button>
             )}
           </div>
-          <label className="flex items-start gap-3">
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">Browser noise filter while recording</span>
-              <span className="block text-xs text-ink-3">Leave off for the best result — the cleaner works better with the untouched sound.</span>
-            </span>
-            <Switch checked={cfg.browserFilter} onCheckedChange={(browserFilter) => set({ browserFilter })} disabled={recording} />
-          </label>
 
           <div className="flex items-center gap-3 text-2xs font-semibold tracking-wide text-ink-4 uppercase">
             <span className="h-px flex-1 bg-grid" />
@@ -426,50 +426,59 @@ export function VoiceRecorder() {
           {source && (
             <>
               <Group title="Cleanup">
-                <div className="py-3">
+                <div className="flex flex-col gap-2 py-3">
                   <Segmented label="Strength" value={cfg.preset} onChange={choosePreset} options={PRESET_OPTIONS} className={`w-full [&>button]:flex-1 [&>button]:justify-center ${TOUCH_SEGMENTS}`} />
+                  <p className="text-xs text-ink-3">{PRESET_HINTS[cfg.preset]}</p>
                 </div>
-                <Row label="AI noise removal" hint="Removes fans, traffic, keyboard clicks, hiss and room echo around your voice.">
-                  <Switch checked={cfg.ai} onCheckedChange={(ai) => setClean({ ai })} />
-                </Row>
-                {cfg.ai && (
-                  <Row label="AI amount" hint="Lower it if your voice starts to sound watery.">
-                    <Slider label="AI amount" value={cfg.aiMix} min={0.3} max={1} step={0.05} onChange={(aiMix) => setClean({ aiMix })} />
-                  </Row>
-                )}
-                <Row label="Steady noise reduction" hint="Takes out constant hiss and hum that's left over.">
-                  <Slider label="Noise reduction" value={cfg.reduce} onChange={(reduce) => setClean({ reduce })} />
-                </Row>
-                <Row label="Quiet the gaps" hint="Turns down the background between words and sentences.">
-                  <Slider label="Gate" value={cfg.gate} onChange={(gate) => setClean({ gate })} />
-                </Row>
-                <Row label="Remove electrical hum">
-                  <div className="w-full sm:w-64">
-                    <Choice
-                      value={cfg.hum}
-                      onChange={(hum) => setClean({ hum })}
-                      options={[
-                        { value: "auto", label: "Auto" },
-                        { value: "50", label: "50 Hz" },
-                        { value: "60", label: "60 Hz" },
-                        { value: "off", label: "Off" },
-                      ]}
-                    />
-                  </div>
-                </Row>
-                <Row label="Remove low rumble" hint="Cuts thumps, wind and desk vibration below the voice.">
-                  <Switch checked={cfg.rumble} onCheckedChange={(rumble) => setClean({ rumble })} />
-                </Row>
-                <Row label="Voice clarity" hint="A gentle boost to presence so words are easier to understand.">
-                  <Switch checked={cfg.clarity} onCheckedChange={(clarity) => setClean({ clarity })} />
-                </Row>
-                <Row label="Even out the volume" hint="Brings your voice to a steady, comfortable loudness without clipping.">
-                  <Switch checked={cfg.loudness} onCheckedChange={(loudness) => setClean({ loudness })} />
-                </Row>
-                <Row label="Trim silence at the ends">
-                  <Switch checked={cfg.trim} onCheckedChange={(trim) => setClean({ trim })} />
+                <Row label="Fine-tune" hint="Set each step yourself: AI noise removal, hum, rumble, gaps, clarity and volume.">
+                  <Switch checked={tuning} onCheckedChange={setTuning} />
                 </Row>
               </Group>
+
+              {tuning && (
+                <Group title="Fine-tune">
+                  <Row label="AI noise removal" hint="Removes fans, traffic, keyboard clicks, hiss and room echo around your voice.">
+                    <Switch checked={cfg.ai} onCheckedChange={(ai) => setClean({ ai })} />
+                  </Row>
+                  {cfg.ai && (
+                    <Row label="AI amount" hint="Lower it if your voice starts to sound watery.">
+                      <Slider label="AI amount" value={cfg.aiMix} min={0.3} max={1} step={0.05} onChange={(aiMix) => setClean({ aiMix })} />
+                    </Row>
+                  )}
+                  <Row label="Steady noise reduction" hint="Takes out constant hiss and hum that's left over.">
+                    <Slider label="Noise reduction" value={cfg.reduce} onChange={(reduce) => setClean({ reduce })} />
+                  </Row>
+                  <Row label="Quiet the gaps" hint="Turns down the background between words and sentences.">
+                    <Slider label="Gate" value={cfg.gate} onChange={(gate) => setClean({ gate })} />
+                  </Row>
+                  <Row label="Remove electrical hum">
+                    <div className="w-full sm:w-64">
+                      <Choice
+                        value={cfg.hum}
+                        onChange={(hum) => setClean({ hum })}
+                        options={[
+                          { value: "auto", label: "Auto" },
+                          { value: "50", label: "50 Hz" },
+                          { value: "60", label: "60 Hz" },
+                          { value: "off", label: "Off" },
+                        ]}
+                      />
+                    </div>
+                  </Row>
+                  <Row label="Remove low rumble" hint="Cuts thumps, wind and desk vibration below the voice.">
+                    <Switch checked={cfg.rumble} onCheckedChange={(rumble) => setClean({ rumble })} />
+                  </Row>
+                  <Row label="Voice clarity" hint="A gentle boost to presence so words are easier to understand.">
+                    <Switch checked={cfg.clarity} onCheckedChange={(clarity) => setClean({ clarity })} />
+                  </Row>
+                  <Row label="Even out the volume" hint="Brings your voice to a steady, comfortable loudness without clipping.">
+                    <Switch checked={cfg.loudness} onCheckedChange={(loudness) => setClean({ loudness })} />
+                  </Row>
+                  <Row label="Trim silence at the ends">
+                    <Switch checked={cfg.trim} onCheckedChange={(trim) => setClean({ trim })} />
+                  </Row>
+                </Group>
+              )}
 
               <div className="flex flex-wrap items-end gap-3 rounded-xl bg-sunken/70 p-3">
                 <div className="w-full sm:w-56">

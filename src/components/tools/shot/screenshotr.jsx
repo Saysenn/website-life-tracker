@@ -18,7 +18,7 @@ import { canPinOnTop, pinCount, pinImage, subscribePins, unpinAll } from "@/lib/
 import { canvasToBlob, COLORS, encode, fileName, renderDoc } from "@/lib/tools/shot/render";
 import { cn } from "@/lib/utils";
 import { MediaLibrary } from "../media-library";
-import { SaveLocation, useSaveFolder } from "../save-location";
+import { useSaveFolder } from "../save-location";
 import { TOUCH_SEGMENTS } from "../screen/panels";
 import { ToolHeader } from "../tool-header";
 import { AreaSelect } from "./area-select";
@@ -560,10 +560,6 @@ export function Screenshotr() {
             if (file) openFile(file);
           }}
         />
-        <label className="ml-auto flex h-10 items-center gap-2 rounded-xl px-2 text-sm text-ink-2">
-          <Switch checked={s.keep} onCheckedChange={toggleKeep} aria-label="Keep the screen shared" />
-          Keep screen shared
-        </label>
         {sharing && s.keep && (
           <button
             type="button"
@@ -571,7 +567,7 @@ export function Screenshotr() {
               stopSharing();
               setSharing(false);
             }}
-            className="flex h-8 items-center gap-1.5 rounded-lg bg-danger-soft px-2.5 text-xs font-semibold text-danger hover:bg-danger-soft/70"
+            className="ml-auto flex h-8 items-center gap-1.5 rounded-lg bg-danger-soft px-2.5 text-xs font-semibold text-danger hover:bg-danger-soft/70"
           >
             <span className="size-2 rounded-full bg-danger" />
             Sharing · Stop
@@ -628,9 +624,6 @@ export function Screenshotr() {
                     </div>
                   )}
                 </div>
-                <div className="rounded-2xl bg-surface px-3 shadow-card">
-                  <SaveLocation value={s.saveTo} onChange={(saveTo) => set({ saveTo })} folder={folder} what="screenshots" compact />
-                </div>
                 <p className="px-1 text-xs text-ink-3 tabular-nums">
                   {doc.base.width} × {doc.base.height}
                   {doc.dpr > 1 ? ` · ${Math.round(doc.dpr * 10) / 10}× screen` : ""} · edits are kept in the history
@@ -640,7 +633,7 @@ export function Screenshotr() {
           ) : (
             <Empty isMac={isMac} onArea={() => capture("area")} onPaste={paste} onOpen={() => fileInput.current?.click()} extension={extension} onExtension={() => setTab("launch")} />
           ))}
-        {tab === "settings" && <ShotSettings s={s} set={set} folder={folder} isMac={isMac} />}
+        {tab === "settings" && <ShotSettings s={s} set={set} folder={folder} isMac={isMac} onKeep={toggleKeep} />}
         {tab === "launch" && <ShotLaunch extension={extension} isMac={isMac} />}
       </div>
 

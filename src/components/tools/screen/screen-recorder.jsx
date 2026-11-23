@@ -12,8 +12,6 @@ import {
   PanelsTopLeft,
   PictureInPicture2,
   Presentation,
-  Rocket,
-  Stamp,
   Timer,
   Volume2,
   Webcam,
@@ -40,7 +38,7 @@ import { TutorialPanel } from "./tutorial-panel";
 import { TutorialPad, TutorialToolbar, tutorialKey } from "./tutorial-pad";
 import { TUTORIAL_DEFAULTS } from "@/lib/tools/screen/tutorial";
 import { useSaveFolder } from "../save-location";
-import { AudioPanel, HotkeysPanel, LogoPanel, Meter, OutputPanel, TOUCH_SEGMENTS, VideoPanel, WebcamPanel } from "./panels";
+import { AudioPanel, HotkeysPanel, OutputPanel, TOUCH_SEGMENTS, VideoPanel, WebcamPanel } from "./panels";
 import { useScreenRecorder } from "./use-screen-recorder";
 
 const DEFAULTS = {
@@ -92,7 +90,6 @@ const MODES = [
   { value: "tab", label: "Browser tab", icon: PanelsTopLeft, hint: "Record a tab, with its sound on any computer." },
   { value: "area", label: "Area", icon: Crop, hint: "Pick a screen, then drag a rectangle to record just that part." },
   { value: "webcam", label: "Webcam", icon: Webcam, hint: "Record your camera, like a device recorder." },
-  { value: "audio", label: "Audio only", icon: Mic, hint: "Record the microphone and/or a tab's sound, no video." },
 ];
 
 // Modes that need the browser's screen picker, which phones and tablets don't have.
@@ -104,10 +101,8 @@ const TABS = [
   { value: "audio", label: "Audio", icon: Volume2 },
   { value: "webcam", label: "Webcam", icon: Webcam },
   { value: "tutorial", label: "Tutorial", icon: Presentation },
-  { value: "logo", label: "Logo", icon: Stamp },
-  { value: "output", label: "Output", icon: FolderOpen },
-  { value: "hotkeys", label: "Hotkeys", icon: Keyboard },
-  { value: "launch", label: "Launch", icon: Rocket },
+  { value: "output", label: "Saving", icon: FolderOpen },
+  { value: "launch", label: "Shortcuts & app", icon: Keyboard },
 ];
 
 const noop = () => () => {};
@@ -141,6 +136,8 @@ export function ScreenRecorder() {
     if (stored?.camScale == null && stored?.camSize) merged.camScale = CAM_SCALES[stored.camSize] ?? DEFAULTS.camScale;
     // Before "Save to" existed: a picked folder or "also download" decided it.
     if (!stored?.saveTo && stored?.autoDownload) merged.saveTo = "downloads";
+    // "Audio only" moved out to the Voice recorder.
+    if (merged.mode === "audio") merged.mode = DEFAULTS.mode;
     return merged;
   }, [stored]);
   const set = useCallback((patch) => setStored((prev) => ({ ...DEFAULTS, ...prev, ...patch })), [setStored]);
@@ -348,14 +345,14 @@ export function ScreenRecorder() {
 
       {!support.screen && (
         <p className="mt-4 rounded-xl bg-warning-soft px-3.5 py-2.5 text-sm text-warning">
-          This browser can’t record the screen. Use Chrome, Edge, Firefox or Safari on a computer — webcam and audio recording still work here.
+          This browser can’t record the screen. Use Chrome, Edge, Firefox or Safari on a computer — webcam recording still works here. For audio only, use the Voice recorder.
         </p>
       )}
 
       <div className="mt-5 overflow-hidden rounded-2xl bg-surface shadow-card">
         {/* Mode bar + big REC, like a desktop recorder's top strip. */}
         <div className="flex flex-wrap items-stretch gap-2 bg-sunken/70 p-2">
-          {/* Phones: all six modes in a 3×2 grid on their own row, actions full width below. */}
+          {/* Phones: all five modes in a 3-column grid on their own row, actions full width below. */}
           <div role="radiogroup" aria-label="Recording mode" className="grid min-w-0 basis-full grid-cols-3 gap-1 sm:flex sm:flex-1 sm:basis-0 sm:overflow-x-auto">
             {MODES.map((entry) => {
               const active = entry.value === cfg.mode;
@@ -428,7 +425,7 @@ export function ScreenRecorder() {
             {(phase === "recording" || phase === "paused") &&
               rec.info &&
               [rec.info.width && `${rec.info.width}×${rec.info.height}`, rec.info.width && `${rec.info.fps} fps`, extensionFor(rec.info.type).toUpperCase()].filter(Boolean).join(" · ")}
-            {phase === "idle" && `${mode.label} · ${cfg.format.toUpperCase()} · ${cfg.fps} fps${cfg.mic ? " · mic" : ""}${cfg.systemAudio ? " · sound" : ""}${cfg.cam && cfg.mode !== "webcam" && cfg.mode !== "audio" ? " · webcam" : ""}`}
+            {phase === "idle" && `${mode.label} · ${cfg.format.toUpperCase()} · ${cfg.fps} fps${cfg.mic ? " · mic" : ""}${cfg.systemAudio ? " · sound" : ""}${cfg.cam && cfg.mode !== "webcam" ? " · webcam" : ""}`}
           </span>
           {live && support.popOut && !pip && (
             <button type="button" onClick={popOut} className="flex h-8 items-center gap-1.5 rounded-lg bg-sunken px-2.5 text-xs font-semibold hover:bg-hover">
@@ -477,18 +474,21 @@ export function ScreenRecorder() {
                 tutorial={teaching ? { tool, setTool, setInk } : null}
               />
             )}
-            {tab === "video" && <VideoPanel cfg={cfg} set={set} support={support} locked={busy} />}
+            {tab === "video" && <VideoPanel cfg={cfg} set={set} support={support} locked={busy} logoUrl={logo?.url} onLogo={changeLogo} />}
             {tab === "audio" && <AudioPanel cfg={cfg} set={set} devices={devices} onAllow={() => allowDevices("audio")} level={rec.level} live={live} locked={busy} />}
             {tab === "webcam" && (
               <WebcamPanel cfg={cfg} set={set} devices={devices} onAllow={() => allowDevices("video")} locked={busy} live={live} liveCamera={Boolean(live && rec.info?.camera)} />
             )}
             {tab === "tutorial" && <TutorialPanel cfg={cfg} set={set} extension={extension} live={live} isMac={isMac} />}
-            {tab === "logo" && <LogoPanel cfg={cfg} set={set} logoUrl={logo?.url} onLogo={changeLogo} />}
             {tab === "output" && (
               <OutputPanel cfg={cfg} set={set} folder={folder} count={items.length} />
             )}
-            {tab === "hotkeys" && <HotkeysPanel cfg={cfg} set={set} isMac={isMac} />}
-            {tab === "launch" && <LaunchPanel extension={extension} isMac={isMac} />}
+            {tab === "launch" && (
+              <div className="flex flex-col gap-3">
+                <HotkeysPanel cfg={cfg} set={set} isMac={isMac} />
+                <LaunchPanel extension={extension} isMac={isMac} />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -550,7 +550,7 @@ function HomePanel({ cfg, set, mode, rec, area, setArea, onAspect, isMac, canSha
   const live = phase === "recording" || phase === "paused" || phase === "countdown";
   const busy = phase !== "idle";
   const ModeIcon = mode.icon;
-  const videoModes = cfg.mode !== "webcam" && cfg.mode !== "audio";
+  const videoModes = cfg.mode !== "webcam";
 
   return (
     <div className="flex flex-col gap-3">
@@ -581,20 +581,6 @@ function HomePanel({ cfg, set, mode, rec, area, setArea, onAspect, isMac, canSha
         </div>
       ) : rec.preview ? (
         <LivePreview stream={rec.preview} countdown={rec.countdown} />
-      ) : live && !rec.preview ? (
-        <div className="flex aspect-[3/1] w-full flex-col items-center justify-center gap-4 rounded-xl bg-sunken px-6">
-          {rec.countdown > 0 ? (
-            <span className="text-[6.4rem] font-semibold tabular-nums">{rec.countdown}</span>
-          ) : (
-            <>
-              <Mic className="size-[3.2rem] text-danger" strokeWidth={1.5} />
-              <div className="flex w-full max-w-[40rem] flex-col gap-2">
-                {cfg.mic && <Meter read={() => rec.level("mic")} active={live} />}
-                {cfg.systemAudio && <Meter read={() => rec.level("system")} active={live} />}
-              </div>
-            </>
-          )}
-        </div>
       ) : (
         <div className="flex aspect-[21/9] w-full flex-col items-center justify-center gap-3 rounded-xl bg-sunken px-6 text-center">
           <span className="flex size-14 items-center justify-center rounded-2xl bg-surface text-danger shadow-card">
