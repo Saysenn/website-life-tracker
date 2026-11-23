@@ -1,4 +1,5 @@
 import { Instrument_Sans } from "next/font/google";
+import { DropGuard } from "@/components/drop-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -24,6 +25,7 @@ export default function RootLayout({ children }) {
       <body>
         <TooltipProvider>{children}</TooltipProvider>
         <Toaster />
+        <DropGuard />
       </body>
     </html>
   );

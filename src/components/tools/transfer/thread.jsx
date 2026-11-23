@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
+import { acceptStrayDrops } from "@/lib/stray-drops";
 import { INLINE_TYPES, MAX_MESSAGE, PREVIEW_MAX_BYTES } from "@/lib/transfer/constants";
 import { extensionOf, formatBytes } from "@/lib/tools/files";
 import { cn } from "@/lib/utils";
@@ -685,7 +686,16 @@ export function Thread({
     if (node && pinned.current) node.scrollTop = node.scrollHeight;
   }, [contentKey]);
 
-  if (chat.ended) return renderEnded?.(chat.ended) ?? null;
+  // While this chat is open, files dropped anywhere on the page (the chat list, the header, the margins) come here.
+  const dropFiles = useRef(null);
+  useEffect(
+    () =>
+      acceptStrayDrops({
+        drop: (files) => dropFiles.current?.(files),
+        hover: (on) => setDragging(on && Boolean(dropFiles.current)),
+      }),
+    [],
+  );
 
   const blocked = chat.chat?.blocked;
   const canSend = !(blocked && role === "guest");
@@ -694,6 +704,11 @@ export function Thread({
     pinned.current = true;
     add(files, filesUrl);
   };
+  useEffect(() => {
+    dropFiles.current = canSend && !chat.ended ? sendFiles : null;
+  });
+
+  if (chat.ended) return renderEnded?.(chat.ended) ?? null;
 
   const sendText = async (body) => {
     pinned.current = true;
