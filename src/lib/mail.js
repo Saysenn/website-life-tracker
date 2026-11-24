@@ -3,6 +3,10 @@ import nodemailer from "nodemailer";
 
 let transporter;
 
+// Sender name, and the start of every subject so emails are easy to spot in the inbox.
+export const MAIL_NAME = "Life Tracker";
+const withName = (subject) => (subject.startsWith(MAIL_NAME) ? subject : `${MAIL_NAME}: ${subject}`);
+
 export function mailStatus() {
   const sender = process.env.SMTP_USER?.trim() || null;
   return { configured: Boolean(sender && process.env.SMTP_PASSWORD), sender };
@@ -25,7 +29,7 @@ export async function sendMail({ to, subject, html, text }) {
     auth: { user: sender, pass: process.env.SMTP_PASSWORD.replace(/\s+/g, "") },
   });
 
-  await transporter.sendMail({ from: { name: "Life Tracker", address: sender }, to, subject, html, text });
+  await transporter.sendMail({ from: { name: MAIL_NAME, address: sender }, to, subject: withName(subject), html, text });
 }
 
 export function mailError(error) {

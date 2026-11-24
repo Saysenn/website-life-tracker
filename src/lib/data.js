@@ -1,15 +1,14 @@
 import "server-only";
-import { asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { desc, eq, getTableColumns } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
 import { companies, companyNames, groups, reminderLog, settings } from "@/db/schema";
 import { DEFAULT_CURRENCY, DEFAULT_GRACE_DAYS, DEFAULT_REMINDER_DAYS, DEFAULT_USDT_RATE } from "./constants";
 import { todayIn } from "./dates";
 import { normalizePricing } from "./money";
+import { sortByName } from "./sort";
 
 export const TIMEZONE = process.env.APP_TIMEZONE || "Asia/Dubai";
-
-const byName = (column) => asc(sql`lower(${column})`);
 
 export const getToday = () => todayIn(TIMEZONE);
 
@@ -17,17 +16,17 @@ export const getCompanies = cache(async () => {
   const rows = await db
     .select({ ...getTableColumns(companies), groupName: groups.name })
     .from(companies)
-    .leftJoin(groups, eq(companies.groupId, groups.id))
-    .orderBy(byName(companies.name));
+    .leftJoin(groups, eq(companies.groupId, groups.id));
 
-  return rows.map(({ digirdpPassword, providerPassword, ...company }) => ({
+  // Names are encrypted in the database, so they are sorted here rather than in SQL.
+  return sortByName(rows).map(({ digirdpPassword, providerPassword, ...company }) => ({
     ...company,
     hasPassword: Boolean(digirdpPassword),
     hasProviderPassword: Boolean(providerPassword),
   }));
 });
 
-export const getGroups = cache(() => db.select().from(groups).orderBy(byName(groups.name)));
+export const getGroups = cache(async () => sortByName(await db.select().from(groups)));
 
 export const getNameHistory = cache(() =>
   db.select().from(companyNames).orderBy(desc(companyNames.changedAt), desc(companyNames.id)),

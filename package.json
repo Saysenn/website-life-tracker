@@ -13,7 +13,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "vercel-build": "drizzle-kit migrate && next build"
+    "vercel-build": "drizzle-kit migrate && next build",
+    "db:encrypt": "node scripts/encrypt-data.mjs",
+    "totp:setup": "node scripts/totp-setup.mjs"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
@@ -27,12 +29,12 @@
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",
-    "jspdf": "^3.0.3",
-    "jspdf-autotable": "^5.0.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.46.0",
-    "next": "16.3.5",
+    "next": "16.4.6",
     "next-auth": "5.0.0-beta.32",
-    "nodemailer": "^8.0.11",
+    "nodemailer": "^10.6.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.5.438",
     "radix-ui": "^1.6.7",
@@ -42,13 +44,17 @@
     "server-only": "^0.0.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4.3.3"
+  },
+  "overrides": {
+    "nodemailer": "$nodemailer",
+    "uuid": "^11.1.1"
   }
 }

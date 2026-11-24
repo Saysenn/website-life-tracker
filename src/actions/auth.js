@@ -11,34 +11,36 @@ const SELF_PAGE = "/me";
 /** A sign in on someone else's phone should not last forever. */
 const SELF_DAYS = 30;
 
+/** Same-site paths only. Browsers drop tabs and newlines and treat a backslash as "/", so "/<tab>/evil.com" would leave the site. */
 function safeRedirect(value) {
   const path = typeof value === "string" ? value : "";
-  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : "/";
+  return /^\/(?![/\\])[^\\\x00-\x1f\x7f]*$/.test(path) ? path : "/";
 }
 
 /** Checks the form against the accounts in `allowed`. Returns { role } or { error }. */
 async function check(formData, allowed) {
   const username = String(formData.get("username") ?? "");
   const password = String(formData.get("password") ?? "");
+  const code = String(formData.get("code") ?? "");
   const ip = clientIp(await headers());
 
   if (await isBlocked(ip)) return { error: "Too many attempts. Try again in 15 minutes.", username };
-  const role = verifyLogin(username, password);
+  const role = verifyLogin(username, password, code);
   if (!role || !allowed.includes(role)) {
     await recordFailure(ip);
     return { error: "Username or password is incorrect.", username };
   }
 
   await clearFailures(ip);
-  return { role, username, password };
+  return { role, username, password, code };
 }
 
 async function attempt(formData, allowed) {
   const result = await check(formData, allowed);
   if (result.error) return result;
-  const { role, username, password } = result;
+  const { role, username, password, code } = result;
   const redirectTo = role === FILES_ROLE ? FILES_HOME : safeRedirect(formData.get("next"));
-  await signIn("credentials", { username, password, redirectTo });
+  await signIn("credentials", { username, password, code, redirectTo });
 }
 
 export async function login(_state, formData) {

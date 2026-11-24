@@ -1,6 +1,7 @@
 import { Send } from "lucide-react";
 import { loginSelf } from "@/actions/auth";
 import { GuestTransfer } from "@/components/tools/transfer/guest-transfer";
+import { twoFactorEnabled } from "@/lib/login";
 import { guestChat } from "@/lib/transfer/access";
 import { SELF_IP, autoDeleteOn } from "@/lib/transfer/store";
 import { LoginForm } from "../login/login-form";
@@ -32,7 +33,7 @@ export default async function SelfPage() {
           <h1 className="mt-4 text-xl font-semibold">Send to admin</h1>
           <p className="mt-1 text-sm text-ink-3">Sign in to send messages and files from this device</p>
         </div>
-        <LoginForm action={loginSelf} />
+        <LoginForm action={loginSelf} twoFactor={twoFactorEnabled()} />
       </div>
     </main>
   );

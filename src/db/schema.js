@@ -1,11 +1,25 @@
 import { sql } from "drizzle-orm";
-import { blob, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { decryptText, encryptText } from "./cipher";
 
 const now = sql`(CURRENT_TIMESTAMP)`;
 
+/**
+ * Text that is encrypted in the database and plain everywhere in the app: Drizzle
+ * encrypts it on every insert and update and decrypts it on every read.
+ * The SQL type stays TEXT, so switching a column needs no migration, and rows
+ * saved before still read fine (run `npm run db:encrypt` to encrypt them).
+ * SQL cannot compare, search or sort these columns: do that in JavaScript.
+ */
+const encryptedText = customType({
+  dataType: () => "text",
+  toDriver: (value) => encryptText(value),
+  fromDriver: (value) => decryptText(value),
+});
+
 export const groups = sqliteTable("groups", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull().unique(),
+  name: encryptedText("name").notNull().unique(),
   paymentType: text("payment_type"),
   paymentMethod: text("payment_method"),
   createdAt: text("created_at").notNull().default(now),
@@ -15,17 +29,17 @@ export const companies = sqliteTable(
   "companies",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    name: text("name").notNull(),
-    website: text("website"),
+    name: encryptedText("name").notNull(),
+    website: encryptedText("website"),
     groupId: integer("group_id").references(() => groups.id, { onDelete: "set null" }),
     paymentType: text("payment_type"),
     paymentMethod: text("payment_method"),
     currency: text("currency"),
-    digirdpEmail: text("digirdp_email"),
+    digirdpEmail: encryptedText("digirdp_email"),
     providerPassword: text("provider_password"),
     digirdpPassword: text("digirdp_password"),
-    rdpHost: text("rdp_host"),
-    rdpUsername: text("rdp_username"),
+    rdpHost: encryptedText("rdp_host"),
+    rdpUsername: encryptedText("rdp_username"),
     domainStart: text("domain_start"),
     domainEnd: text("domain_end"),
     domainClosedAt: text("domain_closed_at"),
@@ -41,7 +55,7 @@ export const companies = sqliteTable(
     rdpClosedAt: text("rdp_closed_at"),
     rdpPrice: real("rdp_price"),
     rdpCurrency: text("rdp_currency"),
-    notes: text("notes"),
+    notes: encryptedText("notes"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
@@ -55,7 +69,7 @@ export const companyNames = sqliteTable(
     companyId: integer("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
+    name: encryptedText("name").notNull(),
     changedAt: text("changed_at").notNull().default(now),
   },
   (table) => [index("company_names_company_idx").on(table.companyId)],
@@ -90,7 +104,7 @@ export const digestLog = sqliteTable(
 
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey(),
-  notifyEmail: text("notify_email"),
+  notifyEmail: encryptedText("notify_email"),
   reminderDays: text("reminder_days", { mode: "json" }).notNull().default(sql`'[30,14,7,3,1,0]'`),
   remindersEnabled: integer("reminders_enabled", { mode: "boolean" }).notNull().default(true),
   graceDays: integer("grace_days").notNull().default(6),
@@ -124,11 +138,11 @@ export const transferChats = sqliteTable(
   "transfer_chats",
   {
     id: text("id").primaryKey(),
-    name: text("name").notNull(),
+    name: encryptedText("name").notNull(),
     tokenHash: text("token_hash").notNull(),
     ip: text("ip"),
-    location: text("location"),
-    userAgent: text("user_agent"),
+    location: encryptedText("location"),
+    userAgent: encryptedText("user_agent"),
     blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
     createdAt: integer("created_at").notNull(),
     activeAt: integer("active_at").notNull(),
@@ -151,7 +165,7 @@ export const transferFiles = sqliteTable(
     id: text("id").primaryKey(),
     chatId: text("chat_id").notNull(),
     sender: text("sender").notNull(),
-    name: text("name").notNull(),
+    name: encryptedText("name").notNull(),
     type: text("type").notNull(),
     size: integer("size").notNull(),
     chunkSize: integer("chunk_size").notNull(),

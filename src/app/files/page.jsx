@@ -1,6 +1,10 @@
 import { ArrowLeftRight } from "lucide-react";
 import { loginFiles } from "@/actions/auth";
+import { twoFactorEnabled } from "@/lib/login";
 import { LoginForm } from "../login/login-form";
+
+/** Reads the 2FA setting at request time, not build time. */
+export const dynamic = "force-dynamic";
 
 export const metadata = { title: { absolute: "File transfer" }, robots: { index: false, follow: false } };
 
@@ -15,7 +19,7 @@ export default function FilesLoginPage() {
           <h1 className="mt-4 text-xl font-semibold">File transfer</h1>
           <p className="mt-1 text-sm text-ink-3">Sign in to send and receive files</p>
         </div>
-        <LoginForm action={loginFiles} />
+        <LoginForm action={loginFiles} twoFactor={twoFactorEnabled()} />
       </div>
     </main>
   );

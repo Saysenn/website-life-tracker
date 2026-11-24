@@ -163,7 +163,7 @@ export function reminderEmail(digest, round = "noon") {
 }
 
 export function testEmail() {
-  const subject = "Life Tracker test email";
+  const subject = "Test email";
   const message = "Email is working. Renewal reminders for your domains, hosting and servers will arrive at this address.";
   return {
     subject,

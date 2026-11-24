@@ -47,8 +47,10 @@ export async function readJson(request) {
   }
 }
 
+/** The admin, or the file transfer account, which works the transfer as the admin. */
 export async function isAdminRequest() {
-  return Boolean((await auth())?.user);
+  const role = (await auth())?.user?.role;
+  return role === "admin" || role === "files";
 }
 
 export async function requireAdmin() {

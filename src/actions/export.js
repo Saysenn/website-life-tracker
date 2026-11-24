@@ -1,6 +1,6 @@
 "use server";
 
-import { asc, eq, getTableColumns, sql } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { companies, groups } from "@/db/schema";
@@ -8,6 +8,7 @@ import { SESSION_EXPIRED, fail, ok } from "@/lib/action-helpers";
 import { getGroups, getPricing, getStatusRules, getToday } from "@/lib/data";
 import { exportRow, groupForExport } from "@/lib/export";
 import { isAdmin } from "@/lib/session";
+import { sortByName } from "@/lib/sort";
 import { unseal } from "@/lib/vault";
 
 const exportSchema = z.object({
@@ -25,7 +26,7 @@ export async function exportCompanies(input) {
       .select({ ...getTableColumns(companies), groupName: groups.name })
       .from(companies)
       .leftJoin(groups, eq(companies.groupId, groups.id))
-      .orderBy(asc(sql`lower(${companies.name})`)),
+      .then(sortByName),
     getGroups(),
     getPricing(),
     getStatusRules(),

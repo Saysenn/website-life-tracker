@@ -17,3 +17,6 @@ next-env.d.ts
 
 .DS_Store
 npm-debug.log*
+
+# Plain text backups written by npm run db:encrypt
+backups/

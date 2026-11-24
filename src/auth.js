@@ -7,11 +7,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
-      credentials: { username: {}, password: { type: "password" } },
+      credentials: { username: {}, password: { type: "password" }, code: {} },
       async authorize(credentials, request) {
         const ip = clientIp(request.headers);
         if (await isBlocked(ip)) return null;
-        const role = verifyLogin(credentials?.username, credentials?.password);
+        const role = verifyLogin(credentials?.username, credentials?.password, credentials?.code);
         if (role === "admin") return { id: "admin", name: "Admin", role };
         if (role) return { id: role, name: "File transfer", role };
         await recordFailure(ip);

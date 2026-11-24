@@ -10,6 +10,5 @@ export async function requireSession() {
 
 /** Full admin only. The file transfer account fails this, so every other action stays closed to it. */
 export async function isAdmin() {
-  const user = (await auth())?.user;
-  return Boolean(user && user.role !== "files");
+  return (await auth())?.user?.role === "admin";
 }

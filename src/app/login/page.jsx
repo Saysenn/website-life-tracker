@@ -1,4 +1,5 @@
 import { BrandMark } from "@/components/shell/brand";
+import { twoFactorEnabled } from "@/lib/login";
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in" };
@@ -14,7 +15,7 @@ export default async function LoginPage({ searchParams }) {
           <h1 className="mt-4 text-xl font-semibold">Welcome back</h1>
           <p className="mt-1 text-sm text-ink-3">Sign in to keep every renewal on track</p>
         </div>
-        <LoginForm next={typeof next === "string" ? next : ""} />
+        <LoginForm next={typeof next === "string" ? next : ""} twoFactor={twoFactorEnabled()} />
       </div>
     </main>
   );

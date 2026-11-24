@@ -1,5 +1,4 @@
 import "server-only";
-import { sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { groups } from "@/db/schema";
@@ -15,13 +14,12 @@ export function done(data = null) {
   return ok(data);
 }
 
+/** Group names are encrypted in the database, so the case-insensitive match happens here. */
 export async function findGroupByName(name) {
-  const [row] = await db
-    .select({ id: groups.id })
-    .from(groups)
-    .where(sql`lower(${groups.name}) = lower(${name})`)
-    .limit(1);
-  return row ?? null;
+  const wanted = String(name ?? "").toLowerCase();
+  const rows = await db.select({ id: groups.id, name: groups.name }).from(groups);
+  const row = rows.find((group) => group.name.toLowerCase() === wanted);
+  return row ? { id: row.id } : null;
 }
 
 export async function ensureGroup(name, { paymentType, paymentMethod }) {

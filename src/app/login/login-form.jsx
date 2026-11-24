@@ -6,7 +6,7 @@ import { login } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 
-export function LoginForm({ next = "", action: submit = login }) {
+export function LoginForm({ next = "", action: submit = login, twoFactor = false }) {
   const [state, action, pending] = useActionState(submit, undefined);
   const [visible, setVisible] = useState(false);
 
@@ -45,6 +45,19 @@ export function LoginForm({ next = "", action: submit = login }) {
           </button>
         </div>
       </Field>
+      {twoFactor && (
+        <Field label="Authenticator code" htmlFor="code">
+          <Input
+            id="code"
+            name="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9 ]{6,7}"
+            maxLength={7}
+            placeholder="6 digit code"
+          />
+        </Field>
+      )}
       {state?.error && (
         <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger animate-pop">
           {state.error}

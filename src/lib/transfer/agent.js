@@ -35,7 +35,12 @@ export function agentAccess(request) {
   if (!key) return "disabled";
   const header = request.headers.get("authorization") ?? "";
   const fromHeader = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  const fromPath = decodeURIComponent(request.nextUrl.pathname.match(/^\/api\/(?:mcp|cleaner)\/([^/]+)$/)?.[1] ?? "");
+  let fromPath = "";
+  try {
+    fromPath = decodeURIComponent(request.nextUrl.pathname.match(/^\/api\/(?:mcp|cleaner)\/([^/]+)$/)?.[1] ?? "");
+  } catch {
+    return "denied";
+  }
   const token = fromHeader || fromPath;
   return token && sameText(token, key) ? "ok" : "denied";
 }

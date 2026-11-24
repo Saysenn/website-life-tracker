@@ -21,6 +21,14 @@ const SELF_GUARDED = [/^\/api\/auth\//, /^\/api\/transfer\//];
 
 let expectedDevice;
 
+/** Constant time compare for equal length hex digests. */
+function sameText(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  return diff === 0;
+}
+
 async function sha256(value) {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -38,8 +46,13 @@ const notFound = () =>
   new NextResponse("Not found", { status: 404, headers: { "content-type": "text/plain", "cache-control": "no-store" } });
 
 async function unlock(request, expected) {
-  const key = decodeURIComponent(request.nextUrl.pathname.slice("/unlock/".length));
-  if (!expected || !key || (await sha256(key)) !== expected) return notFound();
+  let key = "";
+  try {
+    key = decodeURIComponent(request.nextUrl.pathname.slice("/unlock/".length));
+  } catch {
+    return notFound();
+  }
+  if (!expected || !key || !sameText(await sha256(key), expected)) return notFound();
   const response = NextResponse.redirect(new URL("/login", request.nextUrl));
   response.cookies.set(DEVICE_COOKIE, expected, {
     httpOnly: true,
@@ -70,7 +83,7 @@ const guarded = auth(async (request) => {
   // Anything else only answers on an unlocked device.
   const unlocked =
     !expected ||
-    request.cookies.get(DEVICE_COOKIE)?.value === expected ||
+    sameText(request.cookies.get(DEVICE_COOKIE)?.value, expected) ||
     Boolean(request.auth) ||
     OPEN_PAGES.has(pathname) ||
     pathname.startsWith("/api/auth/");
@@ -88,6 +101,12 @@ const guarded = auth(async (request) => {
 });
 
 export default function proxy(request, event) {
+  // A broken %-escape makes Next's router throw a 500 further in; answer it here instead.
+  try {
+    decodeURIComponent(request.nextUrl.pathname);
+  } catch {
+    return new NextResponse("Bad request", { status: 400, headers: { "content-type": "text/plain", "cache-control": "no-store" } });
+  }
   if (PUBLIC.some((pattern) => pattern.test(request.nextUrl.pathname))) return NextResponse.next();
   return guarded(request, event);
 }
