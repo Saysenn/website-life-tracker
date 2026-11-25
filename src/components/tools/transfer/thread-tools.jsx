@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, ChevronUp, CheckSquare, Download, List, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, CheckSquare, Download, List, Search, Trash2, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -283,8 +283,21 @@ export function SearchBar({
   );
 }
 
-/** Takes the composer's place while picking files. */
-export function SelectBar({ picked: count, bytes, total, allPicked, matchedOnly, onAll, onNone, onDownload, onClose }) {
+/** Takes the composer's place while picking messages. */
+export function SelectBar({
+  picked: count,
+  files,
+  deletable,
+  bytes,
+  total,
+  allPicked,
+  matchedOnly,
+  onAll,
+  onNone,
+  onDownload,
+  onDelete,
+  onClose,
+}) {
   return (
     <div className="flex items-center gap-2 rounded-2xl bg-surface p-1.5 shadow-card animate-fade">
       <Tooltip label="Stop selecting (Esc)">
@@ -293,22 +306,32 @@ export function SelectBar({ picked: count, bytes, total, allPicked, matchedOnly,
         </Button>
       </Tooltip>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {count ? `${plural(count, "file")} selected` : "Tap files to select them"}
-        </p>
+        <p className="truncate text-sm font-medium">{count ? `${count} selected` : "Tap messages to select them"}</p>
         <p className="truncate text-2xs text-ink-3 tabular-nums">
           {count
-            ? formatBytes(bytes)
-            : `Shift-click to pick a range · ${plural(total, matchedOnly ? "match" : "file", matchedOnly ? "matches" : undefined)}`}
+            ? files
+              ? `${plural(files, "file")} · ${formatBytes(bytes)}`
+              : "No files to download"
+            : `Shift-click to pick a range · ${plural(total, matchedOnly ? "match" : "message", matchedOnly ? "matches" : undefined)}`}
         </p>
       </div>
-      <Button variant="soft" size="md" onClick={allPicked ? onNone : onAll} disabled={!total}>
-        <CheckSquare />
-        <span className="hidden sm:inline">{allPicked ? "Clear" : matchedOnly ? "Select matches" : "Select all"}</span>
-      </Button>
-      <Button onClick={onDownload} disabled={!count}>
+      <Tooltip label={allPicked ? "Clear selection" : matchedOnly ? "Select matches" : "Select all"}>
+        <Button variant="soft" size="md" onClick={allPicked ? onNone : onAll} disabled={!total}>
+          <CheckSquare />
+          <span className="hidden sm:inline">{allPicked ? "Clear" : matchedOnly ? "Select matches" : "Select all"}</span>
+        </Button>
+      </Tooltip>
+      {onDelete && (
+        <Tooltip label={deletable ? `Delete ${plural(deletable, "message")}` : "Nothing selected you can delete"}>
+          <Button variant="danger" size="md" onClick={onDelete} disabled={!deletable} aria-label="Delete selected">
+            <Trash2 />
+            <span className="hidden sm:inline">Delete{deletable > 1 ? ` ${deletable}` : ""}</span>
+          </Button>
+        </Tooltip>
+      )}
+      <Button onClick={onDownload} disabled={!files} aria-label="Download selected">
         <Download />
-        Download{count > 1 ? ` ${count}` : ""}
+        <span className="hidden sm:inline">Download{files > 1 ? ` ${files}` : ""}</span>
       </Button>
     </div>
   );

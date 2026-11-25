@@ -25,13 +25,14 @@ import {
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { acceptStrayDrops } from "@/lib/stray-drops";
 import { INLINE_TYPES, MAX_MESSAGE, PREVIEW_MAX_BYTES } from "@/lib/transfer/constants";
 import { extensionOf, formatBytes } from "@/lib/tools/files";
-import { cn } from "@/lib/utils";
+import { cn, plural } from "@/lib/utils";
 import { ProgressBar } from "../drop-zone";
 import { call } from "./api";
 import { clock, dayLabel, duration } from "./format";
@@ -136,7 +137,7 @@ function FileCard({ file, mine, terms, picking }) {
 
 const LONG_TEXT = 1500;
 
-function TextBubble({ body, mine, terms }) {
+function TextBubble({ body, mine, terms, className }) {
   const [opened, setOpen] = useState(false);
   const long = body.length > LONG_TEXT;
   // A search hit past the cut would be invisible, so show the whole message while searching.
@@ -151,6 +152,7 @@ function TextBubble({ body, mine, terms }) {
       className={cn(
         "max-w-[min(52rem,85%)] rounded-2xl px-3.5 py-2 text-base break-words whitespace-pre-wrap",
         mine ? "rounded-br-md bg-ink text-ground" : "rounded-bl-md bg-surface text-ink shadow-card",
+        className,
       )}
     >
       {long && !open ? `${body.slice(0, LONG_TEXT).trimEnd()}…` : <Highlight text={body} terms={terms} />}
@@ -220,13 +222,17 @@ function MessageMenu({ message, onUnsend }) {
   );
 }
 
-function Bubble({ message, mine, status, terms, dim, focused, picking, picked, onPick, onUnsend }) {
+function Bubble({ message, mine, status, terms, dim, focused, picking, pickable, picked, onPick, onUnsend }) {
   const file = message.file;
-  const pickable = picking && file?.status === "ready";
   const content = file ? (
     <FileCard file={file} mine={mine} terms={terms} picking={pickable} />
   ) : (
-    <TextBubble body={message.body ?? "Message could not be read"} mine={mine} terms={terms} />
+    <TextBubble
+      body={message.body ?? "Message could not be read"}
+      mine={mine}
+      terms={terms}
+      className={pickable && "max-w-full"}
+    />
   );
   return (
     <div
@@ -241,24 +247,25 @@ function Bubble({ message, mine, status, terms, dim, focused, picking, picked, o
         <div
           role="checkbox"
           aria-checked={picked}
-          aria-label={`Select ${file.name}`}
+          aria-label={file ? `Select ${file.name}` : "Select message"}
           tabIndex={0}
-          onClick={(event) => onPick(message.file.id, event.shiftKey)}
+          onClick={(event) => onPick(message.id, event.shiftKey)}
           onKeyDown={(event) => {
             if (event.key === " " || event.key === "Enter") {
               event.preventDefault();
-              onPick(message.file.id, event.shiftKey);
+              onPick(message.id, event.shiftKey);
             }
           }}
           className={cn(
             "flex max-w-full cursor-pointer items-center gap-2.5 rounded-2xl outline-none select-none focus-visible:ring-2 focus-visible:ring-data",
+            !file && "max-w-[min(54rem,90%)]",
             mine && "flex-row-reverse",
           )}
         >
           <Tick on={picked} />
           <div
             className={cn(
-              "max-w-full rounded-2xl transition-[box-shadow,transform] duration-150",
+              "max-w-full min-w-0 rounded-2xl transition-[box-shadow,transform] duration-150 [&>*]:pointer-events-none",
               picked
                 ? "scale-[0.98] ring-2 ring-data ring-offset-2 ring-offset-ground"
                 : "hover:ring-2 hover:ring-grid",
@@ -506,12 +513,12 @@ function ThreadButtons({ searching, picking, canPick, onSearch, onPick }) {
         </Button>
       </Tooltip>
       {canPick && (
-        <Tooltip label={picking ? "Stop selecting" : "Select files to download"}>
+        <Tooltip label={picking ? "Stop selecting" : "Select messages and files"}>
           <Button
             variant="ghost"
             size="icon"
             onClick={onPick}
-            aria-label="Select files"
+            aria-label="Select messages"
             aria-pressed={picking}
             className={cn(picking && "bg-hover text-ink")}
           >
@@ -557,8 +564,9 @@ export function Thread({
   const [jumpedTo, setJumpedTo] = useState(null);
   const [listOpen, setListOpen] = useState(false);
   const searchBox = useRef(null);
-  // Picking files to download together: null while off.
+  // Picking messages to download or delete together: a Set of message ids, null while off.
   const [picked, setPicked] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const anchor = useRef(null);
 
   const terms = useMemo(() => termsOf(search?.query ?? ""), [search?.query]);
@@ -570,19 +578,17 @@ export function Thread({
   const resultIds = useMemo(() => new Set(results.map((message) => message.id)), [results]);
   const currentId = resultIds.has(jumpedTo) ? jumpedTo : (results.at(-1)?.id ?? null);
 
-  // Files that can be downloaded right now, oldest first.
-  const allReady = useMemo(
-    () =>
-      chat.messages
-        .filter((message) => message.file && chat.files[message.file.id] === "ready")
-        .map((message) => message.file),
-    [chat.messages, chat.files],
-  );
+  const blocked = chat.chat?.blocked;
+  const canSend = !(blocked && role === "guest");
+  // Guests can take back their own messages; the admin can clear anything in their chat.
+  const canDelete = (message) => canSend && (role === "admin" || message.sender === role);
+  const isReady = (message) => Boolean(message.file) && chat.files[message.file.id] === "ready";
+  const canPickMessage = (message) => isReady(message) || canDelete(message);
+
+  // Messages that can be downloaded or deleted right now, oldest first.
+  const allPickable = chat.messages.filter(canPickMessage);
   // "Select all" and shift-click ranges stick to search hits while searching.
-  const readyFiles = useMemo(
-    () => (active ? allReady.filter((file) => results.some((message) => message.file?.id === file.id)) : allReady),
-    [active, allReady, results],
-  );
+  const pickable = active ? allPickable.filter((message) => resultIds.has(message.id)) : allPickable;
 
   useEffect(() => {
     if (!active || currentId == null) return;
@@ -610,7 +616,7 @@ export function Thread({
   const pick = (id, range) => {
     setPicked((current) => {
       const next = new Set(current);
-      const order = readyFiles.map((file) => file.id);
+      const order = pickable.map((message) => message.id);
       const from = order.indexOf(anchor.current);
       const to = order.indexOf(id);
       if (range && from !== -1 && to !== -1) {
@@ -625,7 +631,9 @@ export function Thread({
     anchor.current = id;
   };
 
-  const pickedFiles = picked ? allReady.filter((file) => picked.has(file.id)) : [];
+  const pickedMessages = picked ? allPickable.filter((message) => picked.has(message.id)) : [];
+  const pickedFiles = pickedMessages.filter(isReady).map((message) => message.file);
+  const pickedDeletable = pickedMessages.filter(canDelete);
   const pickedBytes = pickedFiles.reduce((sum, file) => sum + file.size, 0);
   const downloadPicked = () => {
     if (!pickedFiles.length) return;
@@ -661,7 +669,7 @@ export function Thread({
   });
   useEffect(() => {
     const onKey = (event) => {
-      if (document.querySelector("[role='dialog']")) return;
+      if (document.querySelector("[role='dialog'],[role='alertdialog']")) return;
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
         keys.current.openSearch();
@@ -697,8 +705,6 @@ export function Thread({
     [],
   );
 
-  const blocked = chat.chat?.blocked;
-  const canSend = !(blocked && role === "guest");
   const sendFiles = (files) => {
     if (!canSend || !files?.length) return;
     pinned.current = true;
@@ -724,6 +730,22 @@ export function Thread({
     } catch (error) {
       if (error.status === 404) return;
       restore();
+      toast.error(error.message);
+    }
+  };
+
+  // Same as unsend, for everything picked: off the screen at once, back only if the server refuses.
+  const deletePicked = async () => {
+    const targets = pickedDeletable;
+    if (!targets.length) return;
+    setConfirmDelete(false);
+    setPicked(null);
+    const restores = targets.map((message) => chat.removeMessage(message.id));
+    try {
+      await call(messagesUrl, { method: "DELETE", body: { ids: targets.map((message) => message.id) } });
+      toast.success(`Deleted ${plural(targets.length, "message")}`);
+    } catch (error) {
+      restores.forEach((restore) => restore());
       toast.error(error.message);
     }
   };
@@ -755,7 +777,7 @@ export function Thread({
           <ThreadButtons
             searching={Boolean(search)}
             picking={Boolean(picked)}
-            canPick={allReady.length > 0}
+            canPick={allPickable.length > 0}
             onSearch={() => (search ? closeSearch() : openSearch())}
             onPick={togglePicking}
           />
@@ -826,7 +848,8 @@ export function Thread({
                     dim={active && !resultIds.has(message.id)}
                     focused={active && message.id === currentId}
                     picking={Boolean(picked)}
-                    picked={Boolean(picked?.has(message.file?.id))}
+                    pickable={Boolean(picked) && canPickMessage(live)}
+                    picked={Boolean(picked?.has(message.id))}
                     onPick={pick}
                     onUnsend={mine && canSend ? unsend : null}
                   />
@@ -847,16 +870,21 @@ export function Thread({
       <div className="shrink-0 px-3 pt-1 pb-3 sm:px-5 sm:pb-4">
         {picked ? (
           <SelectBar
-            picked={pickedFiles.length}
+            picked={pickedMessages.length}
+            files={pickedFiles.length}
+            deletable={pickedDeletable.length}
             bytes={pickedBytes}
-            total={readyFiles.length}
-            allPicked={readyFiles.length > 0 && readyFiles.every((file) => picked.has(file.id))}
+            total={pickable.length}
+            allPicked={pickable.length > 0 && pickable.every((message) => picked.has(message.id))}
             matchedOnly={active}
-            onAll={() => setPicked((current) => new Set([...current, ...readyFiles.map((file) => file.id)]))}
+            onAll={() => setPicked((current) => new Set([...current, ...pickable.map((message) => message.id)]))}
             onNone={() =>
-              setPicked((current) => new Set([...current].filter((id) => !readyFiles.some((file) => file.id === id))))
+              setPicked(
+                (current) => new Set([...current].filter((id) => !pickable.some((message) => message.id === id))),
+              )
             }
             onDownload={downloadPicked}
+            onDelete={() => setConfirmDelete(true)}
             onClose={() => setPicked(null)}
           />
         ) : (
@@ -874,6 +902,19 @@ export function Thread({
           </p>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${plural(pickedDeletable.length, "message")}?`}
+        description={
+          pickedDeletable.length < pickedMessages.length
+            ? `Only ${plural(pickedDeletable.length, "message")} of the ${pickedMessages.length} selected can be deleted. They disappear for both of you, files included. This cannot be undone.`
+            : "They disappear for both of you, files included. This cannot be undone."
+        }
+        confirmLabel="Delete"
+        onConfirm={deletePicked}
+      />
 
       {dragging && (
         <div className="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-data bg-data-soft/90 text-data animate-fade">

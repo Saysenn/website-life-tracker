@@ -402,20 +402,42 @@ export async function postMessage(chat, role, body, { max = MAX_MESSAGE } = {}) 
  * chat's last-active time rolls back to whatever is left.
  */
 export async function unsendMessage(chat, role, id) {
-  assertOpen(chat, role);
-  const messageId = Number(id);
-  if (!Number.isSafeInteger(messageId)) throw new HttpError(400, "Invalid message.");
-  const message = await db.query.transferMessages.findFirst({
-    where: and(
-      eq(transferMessages.id, messageId),
-      eq(transferMessages.chatId, chat.id),
-      eq(transferMessages.sender, role),
-    ),
-  });
-  if (!message) throw new HttpError(404, "That message is already gone.");
+  const removed = await unsendMessages(chat, role, [id]);
+  if (!removed) throw new HttpError(404, "That message is already gone.");
+}
 
-  if (message.fileId) await deleteFileRows([message.fileId]);
-  await db.delete(transferMessages).where(eq(transferMessages.id, message.id));
+const MAX_BULK = 1000;
+
+/**
+ * Deletes many messages at once, the same way as unsending one. A guest can
+ * only take back their own; the admin can clear anything in their chat.
+ * Returns how many were removed (ids already gone are skipped quietly).
+ */
+export async function unsendMessages(chat, role, ids) {
+  assertOpen(chat, role);
+  if (!Array.isArray(ids) || !ids.length || ids.length > MAX_BULK) throw new HttpError(400, "Invalid messages.");
+  const messageIds = [...new Set(ids.map(Number))];
+  if (!messageIds.every(Number.isSafeInteger)) throw new HttpError(400, "Invalid messages.");
+
+  const rows = await db
+    .select({ id: transferMessages.id, fileId: transferMessages.fileId })
+    .from(transferMessages)
+    .where(
+      and(
+        inArray(transferMessages.id, messageIds),
+        eq(transferMessages.chatId, chat.id),
+        role === "admin" ? undefined : eq(transferMessages.sender, role),
+      ),
+    );
+  if (!rows.length) return 0;
+
+  await deleteFileRows(rows.map((row) => row.fileId).filter(Boolean));
+  await db.delete(transferMessages).where(
+    inArray(
+      transferMessages.id,
+      rows.map((row) => row.id),
+    ),
+  );
 
   const [latest] = await db
     .select({ at: max(transferMessages.createdAt) })
@@ -425,6 +447,7 @@ export async function unsendMessage(chat, role, id) {
     .update(transferChats)
     .set({ activeAt: latest?.at ?? chat.createdAt })
     .where(eq(transferChats.id, chat.id));
+  return rows.length;
 }
 
 /* Files */
